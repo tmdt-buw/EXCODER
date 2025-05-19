@@ -1,7 +1,7 @@
 import argparse
 import logging
 from params import DATASET_NAMES, MODEL_NAMES, XAI_METHODS
-from explain_datasets import main as explain_datasets
+from xai_explain_datasets import main as explain_datasets
 
 
 CONF_MODELS: dict[MODEL_NAMES, dict[str, any]] = {
