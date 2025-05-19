@@ -1,4 +1,3 @@
-import os
 import argparse
 from pathlib import Path
 import logging
@@ -6,47 +5,35 @@ from copy import deepcopy
 from lightning import seed_everything
 import torch
 import pickle
+from tqdm import tqdm
+from torchmetrics import F1Score
+from sklearn.metrics import auc
 from params import (
     DATASET_NAMES,
     MODEL_NAMES,
     XAI_METHODS,
 )
 from utils import get_classification_models_and_data
-from tqdm import tqdm
-from torchmetrics import F1Score
-from sklearn.metrics import auc
+from xai_methods.utils import (
+    load_explanations, 
+    get_dataset_and_model, 
+    get_accuracy_and_f1
+)
 
-
-def return_predicted_class(model, model_type, input):
-    if model_type in ["DVAE_Transformer", "VQ-VAE_Transformer"]:
-        logits = model(input.squeeze(-1), generate=False)
-    else:
-        logits = model(input)
-    return logits.argmax(dim=1)
-
-
-def get_accuracy_and_f1_for_dataset(
-    model,
-    dataset,
-    target,
-    f1_score,
-    classification_batch_size: int = 512,
-    model_type: str = "MLP",
-):
-    # get list of predicted classes for each batch
-    model_outputs = []
-    dataset_size = dataset.shape[0]
-    for j in range(0, dataset_size, classification_batch_size):
-        batch = dataset[j : j + classification_batch_size].clone().to(model.device)
-        output = return_predicted_class(model, model_type, batch)
-        model_outputs.append(output.cpu())
-    model_outputs = torch.cat(model_outputs)
-    accuracy = (model_outputs == target).float().mean()
-    f1 = f1_score(model_outputs, target)
-    return accuracy, f1
 
 
 def get_most_important_features_in_order(explanations: torch.Tensor):
+    """
+    Sort features by their importance according to the XAI explanations.
+    
+    Args:
+        explanations: Tensor containing feature importance values for each instance
+                     in shape (dataset_size, input_size*input_dim)
+                    
+    Returns:
+        torch.Tensor: Indices of features sorted by importance (most to least) for each instance
+                     in shape (dataset_size, input_size*input_dim)
+    """
     assert (
         len(explanations.shape) == 2
     ), "Explanations should be in shape (dataset_size, input_size*input_dim)"
@@ -66,6 +53,31 @@ def perturb(
     model_type: str = "MLP",
     missing_category: int = 128,
 ):
+    """
+    Progressively perturb features in order of importance and measure performance degradation.
+    
+    This function iteratively perturbs the most important features in the dataset
+    according to the provided order and measures how model performance decreases.
+    For each step, it perturbs step_size additional features, replacing them
+    with zeros or a missing category token.
+    
+    Args:
+        feature_order: Indices of features sorted by importance for each instance
+        dataset: Input dataset to perturb
+        target: Ground truth labels 
+        model: The model to evaluate
+        classification_batch_size: Batch size for model inference
+        step_size: Number of features to perturb in each step
+        f1_score: F1 score metric instance
+        model_type: Type of the model
+        missing_category: Value to use for perturbation in latent models
+        
+    Returns:
+        tuple: 
+            - Perturbed dataset after all perturbation steps
+            - Accuracy at each perturbation step
+            - F1 score at each perturbation step
+    """
     dataset_perturbed = dataset.clone()
     use_latent_input = model.hparams.get("use_latent_input", False)
     seq_len = feature_order.shape[1]
@@ -102,15 +114,13 @@ def perturb(
                 dataset_size, -1, model.in_dim
             )
 
-        accuracy_while_perturbing[step], f1_while_perturbing[step] = (
-            get_accuracy_and_f1_for_dataset(
-                model,
-                dataset_perturbed,
-                target,
-                f1_score,
-                classification_batch_size,
-                model_type,
-            )
+        accuracy_while_perturbing[step], f1_while_perturbing[step] = get_accuracy_and_f1(
+            model,
+            dataset_perturbed,
+            target,
+            f1_score,
+            classification_batch_size,
+            model_type,
         )
     return dataset_perturbed, accuracy_while_perturbing, f1_while_perturbing
 
@@ -118,45 +128,56 @@ def perturb(
 def get_dataset_and_model_and_explanations(
     dataset_name: DATASET_NAMES, model_type: MODEL_NAMES, conf: dict[str, any]
 ):
-    # get the explanations
-    project_path = Path(os.path.abspath(""))
-
-    model, data_module = get_classification_models_and_data(
-        dataset_name=dataset_name,
-        model_type=model_type,
-        batch_size=conf["batch_size"],
-        data_path=conf["data_path"],
-        seed=conf["seed"],
+    """
+    Load the dataset, model, and XAI explanations.
+    
+    This function handles loading the model and dataset, and retrieves
+    the pre-computed explanations for the specified XAI method. For baseline
+    comparison, it can generate random explanations if requested.
+    
+    Args:
+        dataset_name: Name of the dataset to load
+        model_type: Type of model to load
+        conf: Configuration dictionary containing:
+            - xai_method: XAI method to use
+            - seed: Random seed for reproducibility
+            - data_path: Path to data directory
+            - step_size: Number of features to perturb in each step
+            - use_small_subset: Whether to use a small subset of data
+            
+    Returns:
+        tuple:
+            - model: The loaded model
+            - dataset: The input dataset
+            - target: Ground truth labels
+            - explanations: Explanations from the XAI method
+            
+    Raises:
+        FileNotFoundError: If explanation file cannot be found
+        AssertionError: If step_size is invalid for the dataset
+    """
+    model, dataset, target = get_dataset_and_model(
+        dataset_name, model_type, conf, get_classification_models_and_data
     )
-
-    # get the whole dataset as a single batch as tensor in shape (dataset_size, input_size, in_dim)
-    dataset_complete = data_module.test_dataloader().dataset
-    dataset_size = len(dataset_complete)
-    dataset = torch.stack([dataset_complete[i][0] for i in range(dataset_size)])
-    target = torch.stack([dataset_complete[i][1] for i in range(dataset_size)])
-    logging.info(f"Dataset shape: {dataset.shape}")
 
     if conf["xai_method"] == "RND":
         # get random explanations for baseline methods
         explanations = torch.rand_like(dataset, dtype=torch.float32)
     else:
-        explanation_path = (
-            project_path
-            / conf["data_path"]
-            / "XAI_Results"
-            / dataset_name
-            / model_type
-            / f"seed_{conf['seed']}"
-            / f"{conf['xai_method']}_explanations.pkl"
-        )
-        if not explanation_path.exists():
-            raise FileNotFoundError(f"Explanations not found: {explanation_path}")
-
-        with open(explanation_path, "rb") as f:
-            explanation_dict = pickle.load(f)
-        explanations = torch.tensor(explanation_dict["explanations"])
+        try:
+            explanations = load_explanations(
+                dataset_name, 
+                model_type, 
+                conf["xai_method"], 
+                conf["seed"], 
+                conf["data_path"]
+            )
+        except FileNotFoundError as e:
+            logging.error(f"Error loading explanations: {e}")
+            raise
 
     # reshape to (dataset_size, input_size*in_dim) to show amount of features
+    dataset_size = dataset.shape[0]
     explanations = explanations.reshape(dataset_size, -1)
     logging.info(f"Explanations shape: {explanations.shape}")
 
@@ -174,29 +195,40 @@ def get_dataset_and_model_and_explanations(
 
 
 def main(conf: dict[str, any]):
+    """
+    Evaluate XAI methods by perturbing features in order of importance.
+    
+    This function evaluates the quality of explanations by progressively perturbing
+    the most important features according to the explanation and measuring the 
+    degradation in model performance. The results are quantified using the area 
+    under the accuracy and F1 curves.
+    
+    Args:
+        conf: Dictionary containing configuration parameters including:
+            - dataset_name: Name of the dataset to use
+            - model_type: Type of model to evaluate
+            - xai_method: XAI method to evaluate
+            - step_size: Number of features to perturb in each step
+            - batch_size: Batch size for model inference
+            - seed: Random seed for reproducibility
+            - data_path: Path to data directory
+            - use_small_subset: Whether to use a small subset of the data
+            
+    Returns:
+        dict: Dictionary containing evaluation results:
+            - complete_accuracy: Accuracy at each perturbation step
+            - complete_f1: F1 score at each perturbation step
+            - auc_score_accuracy: Area under the accuracy curve
+            - auc_score_f1: Area under the F1 curve
+            - percentage_perturbed_x_axis: Percentage of features perturbed
+            - conf: Copy of the configuration
+    """
     seed_everything(conf["seed"])
-    ########################################################################################
-    # choose from the following options: "CNC_Machining" | "Welding" | "ECG" | "UEA"
     dataset_name: DATASET_NAMES = conf["dataset_name"]
-    # choose from the following options: "DLinear" | "MLP" | "TimesNet"
     model_type: MODEL_NAMES = conf["model_type"]
-    # choose from the following options: "LIME" | "RISE" | "SM"
     xai_method: XAI_METHODS = conf["xai_method"]
 
     logging.info(f"Running {xai_method} on {dataset_name} with {model_type}")
-
-    ########################################################################################
-
-    output_path = (
-        Path(conf["data_path"])
-        / "XAI_Results"
-        / dataset_name
-        / model_type
-        / f"seed_{conf['seed']}"
-        / f"{xai_method}_perturbations.pkl"
-    )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.info(f"Output path: {output_path}")
 
     torch.set_float32_matmul_precision("medium")
 
@@ -225,7 +257,7 @@ def main(conf: dict[str, any]):
         task="multiclass", num_classes=model.num_classes, average="macro"
     )
 
-    unperturbed_accuracy, unperturbed_f1 = get_accuracy_and_f1_for_dataset(
+    unperturbed_accuracy, unperturbed_f1 = get_accuracy_and_f1(
         model, dataset, target, f1_score, conf["batch_size"], model_type
     )
     logging.info(f"Unperturbed Accuracy: {unperturbed_accuracy}")
@@ -266,10 +298,7 @@ def main(conf: dict[str, any]):
         "percentage_perturbed_x_axis": percentage_perturbed_x_axis.numpy(),
         "conf": conf.copy(),
     }
-    print(dict_to_save)
     return dict_to_save
-    # with open(output_path, "wb") as f:
-    #     pickle.dump(dict_to_save, f)
 
 
 def load_perturbation_results(path: Path):
@@ -277,6 +306,7 @@ def load_perturbation_results(path: Path):
         return []
     with open(path, "rb") as f:
         return pickle.load(f)
+
 
 def check_if_results_exist(list_results: list[dict[str, any]], conf: dict[str, any]):
     for result in list_results:
@@ -286,48 +316,76 @@ def check_if_results_exist(list_results: list[dict[str, any]], conf: dict[str, a
 
 
 def run_xai_method(conf: dict[str, any]):
+    """
+    Run perturbation-based evaluations for multiple XAI methods, models, and datasets.
+    
+    This function coordinates the evaluation process by:
+    1. Loading existing results if available
+    2. Setting up a grid of datasets, models, XAI methods, and seeds
+    3. Running the perturbation-based evaluation for each configuration
+    4. Saving the results to disk
+    
+    The function skips configurations that already have results or are invalid
+    (e.g., attention-based methods on non-transformer models).
+    
+    Args:
+        conf: Base configuration dictionary that will be updated with specific
+             settings for each evaluation run
+             
+    Returns:
+        None: Results are saved to a pickle file at data_path/XAI_Results/perturbation_results.pkl
+    """
     output_path = Path(conf["data_path"]) / "XAI_Results" / "perturbation_results.pkl"
     result_list = load_perturbation_results(output_path)
-    models = ["SAX_MLP"]
-    # models = [
-    #     "MLP",
-    #     "DLinear",
-    #     "VQ-VAE_Transformer",
-    #     "VQ-VAE_MLP",
-    #     "DVAE_Transformer",
-    #     "DVAE_MLP",
-    #     "TimesNet",
-    #     "TS_Transformer",
-    # ]
-    xai_methods = ["SM", "IG", "RISE", "LIME", "ATM", "ATF", "RND"]
-    datasets = ["ECG", "CNC_Machining", "Welding"]
-    for dataset in datasets:
-        conf["dataset_name"] = dataset
-        for model in models:
-            conf["model_type"] = model
-            if model.startswith("DVAE") or model.startswith("VQ-VAE") or model.startswith("SAX"):
-                conf["step_size"] = 1
-            else:
-                conf["step_size"] = 25
-            for xai_method in xai_methods:
-                conf["xai_method"] = xai_method
-                for seed in range(5):
-                    conf["seed"] = seed
-                    if check_if_results_exist(result_list, conf):
-                        logging.info(f"Results already exist for {xai_method} on {dataset} with {model} and seed {seed}")
-                        continue
-                    elif xai_method == "ATF" or xai_method == "ATM" and not model.endswith("_Transformer"):
-                        logging.info(f"Skipping {xai_method} on {dataset} with {model} because it is not a transformer model")
-                        continue
-                    # try:
-                    dict_to_save = deepcopy(main(conf))
-                    result_list.append(dict_to_save)
-                    # except Exception as e:
-                    #     logging.error(
-                    #         f"Error running {xai_method} on {dataset} with {model}: {e}"
-                    #     )
 
-    print(result_list)
+    # Define configurations for evaluation
+    conf.update({
+        "datasets": ["ECG", "CNC_Machining", "Welding"],
+        "models": ["SAX_MLP"],
+        "xai_methods": ["SM", "IG", "RISE", "LIME", "ATM", "ATF", "RND"],
+    })
+    
+    updated_results = []
+    
+    for dataset_name in conf["datasets"]:
+        current_conf = conf.copy()
+        current_conf["dataset_name"] = dataset_name
+        
+        for model_type in conf["models"]:
+            current_conf["model_type"] = model_type
+            
+            # Set step size based on model type
+            if model_type.startswith("DVAE") or model_type.startswith("VQ-VAE") or model_type.startswith("SAX"):
+                current_conf["step_size"] = 1
+            else:
+                current_conf["step_size"] = 25
+                
+            for xai_method in conf["xai_methods"]:
+                current_conf["xai_method"] = xai_method
+                
+                for seed in range(5):
+                    current_conf["seed"] = seed
+                    
+                    # Skip if result already exists
+                    if check_if_results_exist(result_list, current_conf):
+                        logging.info(f"Results already exist for {xai_method} on {dataset_name} with {model_type} and seed {seed}")
+                        continue
+                        
+                    # Skip if attention-based methods on non-transformer models
+                    elif (xai_method == "ATF" or xai_method == "ATM") and not model_type.endswith("_Transformer"):
+                        logging.info(f"Skipping {xai_method} on {dataset_name} with {model_type} because it is not a transformer model")
+                        continue
+                        
+                    try:
+                        dict_to_save = deepcopy(main(current_conf))
+                        updated_results.append(dict_to_save)
+                    except Exception as e:
+                        logging.error(f"Error running {xai_method} on {dataset_name} with {model_type}: {e}")
+    
+    # Add any new results to the existing ones
+    result_list.extend(updated_results)
+    
+    # Save results
     with open(output_path, "wb") as f:
         pickle.dump(result_list, f)
 
@@ -348,5 +406,4 @@ if __name__ == "__main__":
     args.add_argument("--use-small-subset", type=bool, default=False)
     conf = vars(args.parse_args())
     logging.info(f"Configuration: {conf}")
-    # main(conf)
     run_xai_method(conf)

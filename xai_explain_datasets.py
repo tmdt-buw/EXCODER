@@ -1,18 +1,13 @@
-import os
 import argparse
 from pathlib import Path
 import logging
-from pathlib import Path
 from lightning import seed_everything
-import numpy as np
-
 import torch
+
 from xai_methods.saliency_maps import Saliency_Maps
 from xai_methods.lime import Lime
 from xai_methods.rise import Rise
-from xai_methods.shap import SHAP
 from xai_methods.integrated_gradient import IntegratedGradients
-from xai_methods.deeplift import DeepLift
 from xai_methods.attention_map import AttentionMap
 from utils import get_classification_models_and_data
 from params import (
@@ -20,37 +15,34 @@ from params import (
     MODEL_NAMES,
     XAI_METHODS,
 )
-
-
-def get_dataset_and_model(
-    dataset_name: DATASET_NAMES, model_type: MODEL_NAMES, conf: dict[str, any]
-):
-    model, data_module = get_classification_models_and_data(
-        dataset_name=dataset_name,
-        model_type=model_type,
-        batch_size=conf["batch_size"],
-        data_path=conf["data_path"],
-        seed=conf["seed"],
-    )
-
-    # get the whole dataset as a single batch as tensor in shape (dataset_size, input_size, in_dim)
-    dataset_complete = data_module.test_dataloader().dataset
-    dataset_size = len(dataset_complete)
-    dataset = torch.stack([dataset_complete[i][0] for i in range(dataset_size)])
-    target = torch.stack([dataset_complete[i][1] for i in range(dataset_size)])
-    # dataset = dataset.reshape(dataset_size, -1, model.in_dim)
-    logging.info(f"Dataset shape: {dataset.shape}")
-
-    # in case you want to test a shorter dataset
-    if conf["use_small_subset"]:
-        dataset = dataset[:200]
-        target = target[:200]
-    return model, dataset, target
+from xai_methods.utils import get_dataset_and_model
 
 
 def main(conf: dict[str, any]):
+    """
+    Apply explainable AI (XAI) methods to time series classification models.
+    
+    This function generates explanations for a specified dataset and model combination
+    using the selected XAI method. The explanations are saved as pickle files for later use
+    in evaluation and analysis.
+    
+    Args:
+        conf: Dictionary containing configuration parameters including:
+            - dataset_name: Name of the dataset to use (CNC_Machining, Welding, ECG, UEA)
+            - model_type: Type of model to explain (DLinear, MLP, TimesNet, etc.)
+            - xai_method: XAI method to use (LIME, RISE, SM, SHAP, IG, DeepLIFT, ATM, ATF)
+            - data_path: Path to data directory
+            - seed: Random seed for reproducibility
+            - Various method-specific parameters (e.g., lime_num_samples, rise_* parameters)
+    
+    Returns:
+        None: Results are saved to disk at the specified output path
+    
+    Raises:
+        ValueError: If an unsupported XAI method is specified
+        AssertionError: If RISE configuration is incompatible with latent input models
+    """
     seed_everything(conf["seed"])
-    ########################################################################################
     # choose from the following options: "CNC_Machining" | "Welding" | "ECG" | "UEA"
     dataset_name: DATASET_NAMES = conf["dataset_name"]
     # choose from the following options: "DLinear" | "MLP" | "TimesNet"
@@ -59,8 +51,6 @@ def main(conf: dict[str, any]):
     xai_method: XAI_METHODS = conf["xai_method"]
 
     logging.info(f"Running {xai_method} on {dataset_name} with {model_type}")
-
-    ########################################################################################
 
     output_path = (
         Path(conf["data_path"])
@@ -78,7 +68,9 @@ def main(conf: dict[str, any]):
 
     torch.set_float32_matmul_precision("medium")
 
-    model, dataset, target = get_dataset_and_model(dataset_name, model_type, conf)
+    model, dataset, target = get_dataset_and_model(
+        dataset_name, model_type, conf, get_classification_models_and_data
+    )
 
     if model_type == "VQ-VAE_Transformer" or model_type == "DVAE_Transformer":
         model.hparams["use_latent_input"] = True
@@ -182,21 +174,6 @@ def main(conf: dict[str, any]):
             save_path=str(output_path),
         )
         logging.info(f"Dataset explanations shape: {rise_explanations.shape}")
-    elif xai_method == "SHAP":
-        shap = SHAP(
-            model=model,
-            model_type=model_type,
-            dataset_type=dataset_name,
-            use_latent_input=model.hparams.get("use_latent_input", False),
-            background_data=dataset,
-            conf=conf,
-        )
-        shap_explanations = shap.explain(
-            dataset,
-            save_to_pickle=True,
-            save_path=str(output_path),
-        )
-        logging.info(f"Dataset explanations shape: {shap_explanations.shape}")
     elif xai_method == "IG":
         integrated_gradients = IntegratedGradients(
             model=model,
@@ -213,16 +190,6 @@ def main(conf: dict[str, any]):
             save_to_pickle=True,
             save_path=str(output_path),
         )
-    elif xai_method == "DeepLIFT":
-        deeplift = DeepLift(
-            model=model,
-            model_type=model_type,
-            dataset_type=dataset_name,
-            use_latent_input=model.hparams.get("use_latent_input", False),
-            baseline=torch.zeros_like(dataset),
-            conf=conf,
-        )
-        deeplift.explain(dataset, save_to_pickle=True, save_path=str(output_path))
     elif xai_method == "ATM" or xai_method == "ATF":
         attention_map = AttentionMap(
             model=model,

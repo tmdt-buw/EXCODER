@@ -1,28 +1,43 @@
-import os
 import argparse
-from pathlib import Path
 import logging
-from copy import deepcopy
 from lightning import seed_everything
 import torch
-import pickle
+import torch.nn.functional as F
+from itertools import combinations
 from params import (
     DATASET_NAMES,
     MODEL_NAMES,
-    XAI_METHODS,
 )
-import torch.nn.functional as F
-from itertools import combinations
+from xai_methods.utils import load_explanations, run_evaluation, save_results
 
 def main(conf: dict[str, any]):
+    """
+    Evaluate agreement between different XAI methods for the same model and dataset.
+    
+    This function measures the consistency between different explanation methods
+    by computing the cosine similarity between explanation vectors from different methods.
+    Higher similarity indicates greater agreement between explanation methods.
+    
+    Args:
+        conf: Configuration dictionary containing:
+            - dataset_name: Name of the dataset to evaluate
+            - model_type: Type of model to evaluate
+            - seed: Random seed for reproducibility
+            - data_path: Path to data directory
+            
+    Returns:
+        dict: Dictionary containing evaluation results:
+            - mean_cosine_similarity: Average cosine similarity across all pairs of XAI methods
+            - conf: Copy of the configuration
+            
+    Raises:
+        FileNotFoundError: If no explanations could be loaded
+    """
     seed_everything(conf["seed"])
-    ########################################################################################
-    # choose from the following options: "CNC_Machining" | "Welding" | "ECG" | "UEA"
+
     dataset_name: DATASET_NAMES = conf["dataset_name"]
-    # choose from the following options: "DLinear" | "MLP" | "TimesNet"
     model_type: MODEL_NAMES = conf["model_type"]
     logging.info(f"Running {dataset_name} with {model_type}")
-    ########################################################################################
 
     torch.set_float32_matmul_precision("medium")
 
@@ -30,30 +45,19 @@ def main(conf: dict[str, any]):
 
     xai_methods = ["SM", "IG", "RISE", "LIME"]
     for xai_method in xai_methods:
-        conf["xai_method"] = xai_method
-        project_path = Path(os.path.abspath(""))
-        explanation_path = (
-            project_path
-            / conf["data_path"]
-            / "XAI_Results"
-            / dataset_name
-            / model_type
-            / f"seed_{conf['seed']}"
-            / f"{conf['xai_method']}_explanations.pkl"
-        )
         try:
-            if not explanation_path.exists():
-                raise FileNotFoundError(f"Explanations not found: {explanation_path}")
-            with open(explanation_path, "rb") as f:
-                explanation_dict = pickle.load(f)
-            explanations = torch.tensor(explanation_dict["explanations"])
-            # reshape to (dataset_size, input_size*in_dim) to show amount of features
-            explanations = explanations.reshape(explanations.shape[0], -1)
+            explanations = load_explanations(
+                dataset_name, 
+                model_type, 
+                xai_method, 
+                conf["seed"], 
+                conf["data_path"]
+            )
             # min-max normalization
             explanations = (explanations - explanations.min()) / (explanations.max() - explanations.min())
             all_seed_explanations.append(explanations)
         except Exception as e:
-            logging.error(f"Error loading {conf['xai_method']} explanations: {e}")
+            logging.error(f"Error loading {xai_method} explanations: {e}")
 
     if len(all_seed_explanations) == 0:
         raise FileNotFoundError("No explanations found")
@@ -74,32 +78,38 @@ def main(conf: dict[str, any]):
     }
 
     return dict_to_save
-    # with open(output_path, "wb") as f:
-    #     pickle.dump(dict_to_save, f)
 
 def run_xai_method(conf: dict[str, any]):
-    result_list = []
-    models = ["SAX_MLP"]
-    xai_methods = ["SM", "IG", "RISE", "LIME", "ATM"]
-    datasets = ["ECG", "CNC_Machining", "Welding"]
-    for dataset in datasets:
-        conf["dataset_name"] = dataset
-        for model in models:
-            conf["model_type"] = model
-            for seed in range(5):
-                conf["seed"] = seed
-                # for xai_method in xai_methods:
-                #     conf["xai_method"] = xai_method   # xai_method iteration happens inside main
-                try:
-                    dict_to_save = deepcopy(main(conf))
-                    result_list.append(dict_to_save)
-                except Exception as e:
-                    logging.error(f"Error running XAI Methods Agreement on {dataset} with {model}: {e}")
+    """
+    Run XAI method agreement evaluation for multiple datasets and models.
     
-    output_path = Path(conf["data_path"]) / "XAI_Results" / "xai_methods_agreement_results.pkl"
-    logging.info(f"Saving results to {output_path}")
-    with open(output_path, "wb") as f:
-        pickle.dump(result_list, f)
+    This function coordinates the evaluation of agreement between different XAI methods
+    (SM, IG, RISE, LIME) across a grid of datasets and models. Agreement is measured
+    using cosine similarity between pairs of explanation methods.
+    
+    Args:
+        conf: Base configuration dictionary that will be updated with specific
+             settings for each evaluation run
+             
+    Returns:
+        None: Results are saved to a pickle file at data_path/XAI_Results/xai_methods_agreement_results.pkl
+    """
+    # Define the datasets and models to evaluate
+    conf.update({
+        "datasets": ["ECG", "CNC_Machining", "Welding"],
+        "models": ["SAX_MLP"],
+        "num_seeds": 5
+    })
+    
+    # Run the evaluation using the utility function
+    result_list = run_evaluation(conf, main)
+    
+    # Save the results
+    save_results(
+        result_list, 
+        "xai_methods_agreement_results.pkl", 
+        conf["data_path"]
+    )
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -115,9 +125,4 @@ if __name__ == "__main__":
     args.add_argument("--use-small-subset", type=bool, default=False)
     conf = vars(args.parse_args())
 
-    # logging.info(f"Configuration: {conf}")
-    # try:
-        # dict_to_save = main(conf)
-    # except Exception as e:
-        # logging.error(f"Error running XAI Methods Agreement: {e}")
     run_xai_method(conf)

@@ -9,6 +9,17 @@ from torch.nn import functional as F
 
 
 class BlackBoxExplainer:
+    """
+    Base class for all black-box XAI explanation methods.
+    
+    This abstract class provides the common functionality for all explainable AI 
+    methods implemented in the framework. It handles model prediction, explanation 
+    saving, and defines the interface that concrete explainer classes must implement.
+    
+    Subclasses should implement the `explain` method to provide specific 
+    explanation algorithms.
+    """
+    
     def __init__(
         self,
         model: nn.Module,
@@ -17,6 +28,16 @@ class BlackBoxExplainer:
         use_latent_input: bool,
         conf: dict[str, any] | None = None,
     ):
+        """
+        Initialize the black-box explainer.
+        
+        Args:
+            model: The model to explain
+            model_type: Type of the model (e.g., 'MLP', 'DLinear', 'VQ-VAE_Transformer')
+            dataset_type: Type of the dataset (e.g., 'ECG', 'CNC_Machining', 'Welding')
+            use_latent_input: Whether the model uses latent input representation
+            conf: Optional configuration dictionary with method-specific parameters
+        """
         self.model = model
         self.model_type = model_type
         self.dataset_type = dataset_type
@@ -72,9 +93,10 @@ class BlackBoxExplainer:
 
         Args:
             x: Input tensor in Shape (Batch, Input_Size, Input_Dim)
+            return_numpy: Whether to return numpy array (True) or PyTorch tensor (False)
 
         Returns:
-            np.ndarray: Predicted Probabilities in Shape (Batch, Num_Classes)
+            np.ndarray or torch.Tensor: Predicted Probabilities in Shape (Batch, Num_Classes)
         """
         x = x.to(self.model.device)
         if self.model_type in ["DVAE_Transformer", "VQ-VAE_Transformer"]:

@@ -1,59 +1,65 @@
-import os
 import argparse
-from pathlib import Path
 import logging
-from copy import deepcopy
+from itertools import combinations
 from lightning import seed_everything
 import torch
-import pickle
+import torch.nn.functional as F
 from params import (
     DATASET_NAMES,
     MODEL_NAMES,
     XAI_METHODS,
 )
-import torch.nn.functional as F
-from itertools import combinations
+from xai_methods.utils import load_explanations, run_evaluation, save_results
+
 
 def main(conf: dict[str, any]):
+    """
+    Evaluate implementation invariance of XAI methods across different random seeds.
+    
+    Implementation invariance measures how consistent an explanation method is when using
+    different random seeds. This is calculated by computing the cosine similarity
+    between explanations generated with different random seeds. Higher values indicate
+    greater consistency and stability of the explanation method.
+    
+    Args:
+        conf: Configuration dictionary containing:
+            - dataset_name: Name of the dataset to evaluate
+            - model_type: Type of model to evaluate
+            - xai_method: XAI method to evaluate
+            - data_path: Path to data directory
+            
+    Returns:
+        dict: Dictionary containing evaluation results:
+            - mean_cosine_similarity: Average cosine similarity across all explanation pairs
+            - conf: Copy of the configuration
+    """
     seed_everything(conf["seed"])
-    ########################################################################################
-    # choose from the following options: "CNC_Machining" | "Welding" | "ECG" | "UEA"
+    
     dataset_name: DATASET_NAMES = conf["dataset_name"]
-    # choose from the following options: "DLinear" | "MLP" | "TimesNet"
     model_type: MODEL_NAMES = conf["model_type"]
-    # choose from the following options: "LIME" | "RISE" | "SM"
     xai_method: XAI_METHODS = conf["xai_method"]
 
     logging.info(f"Running {xai_method} on {dataset_name} with {model_type}")
 
-    ########################################################################################
 
     torch.set_float32_matmul_precision("medium")
 
     all_seed_explanations = []
     for seed in range(5):
         conf["seed"] = seed
-        project_path = Path(os.path.abspath(""))
-        explanation_path = (
-            project_path
-            / conf["data_path"]
-            / "XAI_Results"
-            / dataset_name
-            / model_type
-            / f"seed_{conf['seed']}"
-            / f"{conf['xai_method']}_explanations.pkl"
-        )
-        if not explanation_path.exists():
-            raise FileNotFoundError(f"Explanations not found: {explanation_path}")
-        
-        with open(explanation_path, "rb") as f:
-            explanation_dict = pickle.load(f)
-        explanations = torch.tensor(explanation_dict["explanations"])
-        # reshape to (dataset_size, input_size*in_dim) to show amount of features
-        explanations = explanations.reshape(explanations.shape[0], -1)
-        # min-max normalization
-        explanations = (explanations - explanations.min()) / (explanations.max() - explanations.min())
-        all_seed_explanations.append(explanations)
+        try:
+            explanations = load_explanations(
+                dataset_name, 
+                model_type, 
+                conf["xai_method"], 
+                conf["seed"], 
+                conf["data_path"]
+            )
+            # min-max normalization
+            explanations = (explanations - explanations.min()) / (explanations.max() - explanations.min())
+            all_seed_explanations.append(explanations)
+        except FileNotFoundError as e:
+            logging.error(f"Error loading explanations: {e}")
 
     logging.info(f"{len(all_seed_explanations)} explanations found with shape: {all_seed_explanations[0].shape}")
 
@@ -71,34 +77,42 @@ def main(conf: dict[str, any]):
     }
 
     return dict_to_save
-    # with open(output_path, "wb") as f:
-    #     pickle.dump(dict_to_save, f)
 
 def run_xai_method(conf: dict[str, any]):
-    result_list = []
-    # models = ["MLP", "DLinear", "VQ-VAE_Transformer", "VQ-VAE_MLP", "DVAE_Transformer", "DVAE_MLP", "TimesNet", "TS_Transformer"]
-    models = ["SAX_MLP"]
+    """
+    Run implementation invariance evaluation for multiple XAI methods, models, and datasets.
     
-    xai_methods = ["SM", "IG", "RISE", "LIME", "ATM"]
-    datasets = ["ECG", "CNC_Machining", "Welding"]
-    for dataset in datasets:
-        conf["dataset_name"] = dataset
-        for model in models:
-            conf["model_type"] = model
-            for xai_method in xai_methods:
-                conf["xai_method"] = xai_method
-                # for seed in range(5):
-                #     conf["seed"] = seed   # seed iteration happens inside main
-                try:
-                    dict_to_save = deepcopy(main(conf))
-                    result_list.append(dict_to_save)
-                except Exception as e:
-                    logging.error(f"Error running {xai_method} on {dataset} with {model}: {e}")
+    This function coordinates the evaluation of implementation invariance across a grid of:
+    - Datasets: ECG, CNC_Machining, Welding
+    - Models: SAX_MLP
+    - XAI methods: SM, IG, RISE, LIME, ATM
     
-    output_path = Path(conf["data_path"]) / "XAI_Results" / "implementation_invariance_results.pkl"
-    logging.info(f"Saving results to {output_path}")
-    with open(output_path, "wb") as f:
-        pickle.dump(result_list, f)
+    Implementation invariance measures how consistent explanations are across different random seeds.
+    
+    Args:
+        conf: Base configuration dictionary that will be updated with specific
+             settings for each evaluation run
+             
+    Returns:
+        None: Results are saved to a pickle file at data_path/XAI_Results/implementation_invariance_results.pkl
+    """
+    # Define the datasets and models to evaluate
+    conf.update({
+        "datasets": ["ECG", "CNC_Machining", "Welding"],
+        "models": ["SAX_MLP"],
+        "xai_methods": ["SM", "IG", "RISE", "LIME", "ATM"],
+        "num_seeds": 5
+    })
+    
+    # Run the evaluation using the utility function
+    result_list = run_evaluation(conf, main)
+    
+    # Save the results
+    save_results(
+        result_list, 
+        "implementation_invariance_results.pkl", 
+        conf["data_path"]
+    )
 
 if __name__ == "__main__":
     logging.basicConfig(

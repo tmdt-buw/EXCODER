@@ -132,6 +132,19 @@ def get_standard_conf(
     use_small_subset: bool = False,
     data_path: str = "data",
 ):
+    """
+    Create a standard configuration dictionary for a specific model, dataset, and XAI method.
+    
+    Args:
+        model_type: Type of the model to use
+        dataset_name: Name of the dataset to use
+        xai_method: XAI method to apply
+        use_small_subset: Whether to use a small subset of the data
+        data_path: Path to the data directory
+        
+    Returns:
+        dict: Configuration dictionary with all required parameters
+    """
     conf = CONF_MODELS[model_type]
     conf["seed"] = 0
     conf["dataset_name"] = dataset_name
@@ -142,9 +155,22 @@ def get_standard_conf(
 
 
 def run_explainations(use_small_subset: bool = False, data_path: str = "data"):
-
+    """
+    Run explanations for various combinations of models, datasets, and XAI methods.
+    
+    This function runs a grid search over specified models, datasets, XAI methods, and seeds,
+    generating explanations for each combination. For each combination, it creates a
+    configuration and calls the explain_datasets function.
+    
+    Args:
+        use_small_subset: Whether to use a small subset of the data for testing
+        data_path: Path to the data directory
+        
+    Returns:
+        None: Results are saved to disk as pickle files
+    """
     dataset_names: list[DATASET_NAMES] = ["CNC_Machining", "Welding", "ECG"]
-    model_types: list[MODEL_NAMES] = ["SAX_MLP"] # "VQ-VAE_MLP", "DVAE_MLP" "VQ-VAE_Transformer", "DVAE_Transformer", "TS_Transformer"
+    model_types: list[MODEL_NAMES] = ["SAX_MLP", "VQ-VAE_MLP", "DVAE_MLP", "VQ-VAE_Transformer", "DVAE_Transformer", "TS_Transformer"]
     xai_methods: list[XAI_METHODS] = ["IG","SM", "RISE", "LIME"] # "IG", "SM", "RISE", "ATM", "LIME", "ATF"
     seeds: list[int] = [0, 1, 2, 3, 4]
 
