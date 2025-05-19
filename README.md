@@ -60,40 +60,45 @@ The ECG dataset is a combination of the MIT-BIH Arrhythmia and PTB Diagnostic EC
 
 ## Classification Results
 ### CNC_Machining
-| model_name                | f1_score      | accuracy      |
-|:--------------------------|:--------------|:--------------|
-| DLinear                   | 0.502 ± 0.000 | 0.957 ± 0.000 |
-| MLP                       | 0.819 ± 0.010 | 0.977 ± 0.001 |
-| TS_Transformer            | 0.489 ± 0.000 | 0.957 ± 0.000 |
-| TimesNet                  | 0.891 ± 0.010 | 0.984 ± 0.001 |
-| VQ-VAE_DVAE_MLP           | 0.962 ± 0.002 | 0.973 ± 0.002 |
-| VQ-VAE_DVAE_Transformer   | 0.959 ± 0.002 | 0.971 ± 0.002 |
-| VQ-VAE_VQ-VAE_MLP         | 0.965 ± 0.001 | 0.975 ± 0.001 |
-| VQ-VAE_VQ-VAE_Transformer | 0.957 ± 0.001 | 0.970 ± 0.001 |
+| model_name         | f1_score      | accuracy      |
+|:-------------------|:--------------|:--------------|
+| DLinear            | 0.502 ± 0.000 | 0.957 ± 0.000 |
+| DVAE_MLP           | 0.745 ± 0.027 | 0.965 ± 0.004 |
+| DVAE_Transformer   | 0.538 ± 0.067 | 0.957 ± 0.001 |
+| MLP                | 0.819 ± 0.010 | 0.977 ± 0.001 |
+| SAX_MLP            | 0.594 ± 0.021 | 0.949 ± 0.007 |
+| TS_Transformer     | 0.489 ± 0.000 | 0.957 ± 0.000 |
+| TimesNet           | 0.891 ± 0.010 | 0.984 ± 0.001 |
+| VQ-VAE_MLP         | 0.755 ± 0.005 | 0.969 ± 0.001 |
+| VQ-VAE_Transformer | 0.701 ± 0.008 | 0.965 ± 0.002 |
 
 
 ### ECG
-| model_name                | f1_score      | accuracy      |
-|:--------------------------|:--------------|:--------------|
-| DLinear                   | 0.641 ± 0.023 | 0.912 ± 0.003 |
-| MLP                       | 0.913 ± 0.008 | 0.983 ± 0.002 |
-| TS_Transformer            | 0.542 ± nan   | 0.914 ± nan   |
-| VQ-VAE_DVAE_MLP           | 0.823 ± 0.009 | 0.966 ± 0.002 |
-| VQ-VAE_DVAE_Transformer   | 0.676 ± 0.182 | 0.948 ± 0.026 |
-| VQ-VAE_VQ-VAE_MLP         | 0.806 ± 0.015 | 0.965 ± 0.006 |
-| VQ-VAE_VQ-VAE_Transformer | 0.787 ± 0.011 | 0.962 ± 0.001 |
+| model_name         | f1_score      | accuracy      |
+|:-------------------|:--------------|:--------------|
+| DLinear            | 0.641 ± 0.023 | 0.912 ± 0.003 |
+| DVAE_MLP           | 0.775 ± 0.005 | 0.952 ± 0.002 |
+| DVAE_Transformer   | 0.517 ± 0.136 | 0.914 ± 0.026 |
+| MLP                | 0.913 ± 0.008 | 0.983 ± 0.002 |
+| SAX_MLP            | 0.684 ± 0.013 | 0.924 ± 0.002 |
+| TS_Transformer     | 0.537 ± 0.037 | 0.914 ± 0.006 |
+| TimesNet           | 0.931 ± 0.005 | 0.988 ± 0.001 |
+| VQ-VAE_MLP         | 0.816 ± 0.007 | 0.965 ± 0.002 |
+| VQ-VAE_Transformer | 0.775 ± 0.023 | 0.956 ± 0.003 |
 
 
 ### Welding
-| model_name                | f1_score      | accuracy      |
-|:--------------------------|:--------------|:--------------|
-| DLinear                   | 0.731 ± 0.024 | 0.744 ± 0.015 |
-| MLP                       | 0.802 ± 0.002 | 0.807 ± 0.002 |
-| TS_Transformer            | 0.727 ± 0.008 | 0.730 ± 0.011 |
-| VQ-VAE_DVAE_MLP           | 0.774 ± 0.003 | 0.782 ± 0.003 |
-| VQ-VAE_DVAE_Transformer   | 0.789 ± 0.003 | 0.795 ± 0.002 |
-| VQ-VAE_VQ-VAE_MLP         | 0.793 ± 0.001 | 0.800 ± 0.001 |
-| VQ-VAE_VQ-VAE_Transformer | 0.792 ± 0.003 | 0.797 ± 0.005 |
+| model_name         | f1_score      | accuracy      |
+|:-------------------|:--------------|:--------------|
+| DLinear            | 0.731 ± 0.024 | 0.744 ± 0.015 |
+| DVAE_MLP           | 0.780 ± 0.001 | 0.786 ± 0.001 |
+| DVAE_Transformer   | 0.761 ± 0.004 | 0.765 ± 0.005 |
+| MLP                | 0.802 ± 0.002 | 0.807 ± 0.002 |
+| SAX_MLP            | 0.749 ± 0.002 | 0.754 ± 0.002 |
+| TS_Transformer     | 0.728 ± 0.008 | 0.733 ± 0.012 |
+| TimesNet           | 0.822 ± 0.002 | 0.825 ± 0.002 |
+| VQ-VAE_MLP         | 0.789 ± 0.001 | 0.794 ± 0.001 |
+| VQ-VAE_Transformer | 0.785 ± 0.006 | 0.792 ± 0.003 |
 
 
 ## Results XAI
