@@ -9,13 +9,13 @@ from xai_methods.lime import Lime
 from xai_methods.rise import Rise
 from xai_methods.integrated_gradient import IntegratedGradients
 from xai_methods.attention_map import AttentionMap
+from xai_methods.utils import get_dataset_and_model
 from utils import get_classification_models_and_data
 from params import (
     DATASET_NAMES,
     MODEL_NAMES,
     XAI_METHODS,
 )
-from xai_methods.utils import get_dataset_and_model
 
 
 def main(conf: dict[str, any]):
