@@ -345,11 +345,8 @@ def prepare_for_subsequence_iteration(conf: dict[str, any]):
     """
     seed_everything(conf["seed"])
 
-    # choose from the following options: "CNC_Machining" | "Welding" | "ECG" | "UEA"
     dataset_name: DATASET_NAMES = conf["dataset_name"]
-    # choose from the following options: "DLinear" | "MLP" | "TimesNet"
     model_type: MODEL_NAMES = conf["model_type"]
-    # choose from the following options: "LIME" | "RISE" | "SM"
     xai_method: XAI_METHODS = conf["xai_method"]
 
     logging.info(f"Running {xai_method} on {dataset_name} with {model_type}")

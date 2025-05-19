@@ -4,7 +4,6 @@ import logging
 import pickle
 import torch
 from copy import deepcopy
-from tqdm import tqdm
 
 
 def load_explanations(dataset_name, model_type, xai_method, seed, data_path):
