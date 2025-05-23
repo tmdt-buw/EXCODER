@@ -19,9 +19,8 @@ The dataset provides multivariate time series from arc welding processes, focusi
 ### ECG - [Kaggle](https://www.kaggle.com/datasets/shayanfazeli/heartbeat/data)
 
 The ECG dataset is a combination of the MIT-BIH Arrhythmia and PTB Diagnostic ECG databases, preprocessed and segmented into individual heartbeats. This univariate dataset classifies heartbeats into five categories, including normal and various arrhythmia types.
-> George B Moody and Roger G Mark. 2001. The impact of the MIT-BIH arrhythmia database. IEEE engineering in medicine and biology magazine 20, 3 (2001), 45–50.
+> Mohammad Kachuee, Shayan Fazeli, and Majid Sarrafzadeh. 2018. Ecg heartbeat classification: A deep transferable representation. In 2018 IEEE international conference on healthcare informatics (ICHI). IEEE, 443–444.
 
-> Ralf Bousseljot, Dieter Kreiseler, and Allard Schnabel. 1995. Nutzung der EKG-Signaldatenbank CARDIODAT der PTB über das Internet. (1995).
 
 ## Results
 
