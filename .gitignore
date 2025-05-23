@@ -13,3 +13,7 @@ logs/*
 dummy.ipynb
 87/*
 92/*
+
+.vscode/
+.venv/
+.idea/
