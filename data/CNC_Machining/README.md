@@ -1,49 +1,98 @@
-# CNC Machining Data 
+# CNC Machining Dataset Setup Instructions
+
+## Overview
+This directory contains setup instructions and preprocessing scripts for the CNC Machining dataset used in our XAI research paper. The dataset provides real-world industrial vibration data collected from brownfield CNC milling machines.
 
 ## Source
-[Github](https://github.com/boschresearch/CNC_Machining)
+**Original Repository:** [Github - boschresearch/CNC_Machining](https://github.com/boschresearch/CNC_Machining)
 
-This repository contains the companion material for the following publication:
+**Research Paper:**
 > Tnani, Mohamed-Ali; Feil, Michael; Diepold, Klaus. Smart Data Collection System for Brownfield CNC Milling Machines: A New Benchmark Dataset for Data-Driven Machine Monitoring. Procedia CIRP2022,107, 131–136.
 
-Please cite this paper if using the dataset and direct any questions regarding the dataset to [Tnani Mohamed-Ali](mailto:mohamed-ali.tnani@boschrexroth.de). The paper can be found at the [CIRP CMS](https://doi.org/10.1016/j.procir.2022.04.022).
+**Paper DOI:** [CIRP CMS](https://doi.org/10.1016/j.procir.2022.04.022)
 
-## General information and Context
-The dataset provided is a collection of real-world industrial vibration data collected from a brownfield CNC milling machine. The acceleration has been measured using a tri-axial accelerometer (Bosch CISS Sensor) mounted inside the machine. The X- Y- and Z-axes of the accelerometer have been recorded using a sampling rate equal to 2 kHz. Thereby normal as well as anomoulous data have been collected for 6 different timeframes, each lasting 6 months from October 2018 until August 2021 and labelled accordingly. It can be used to investigate the scalability of models and research process variations as the anomaly impact differs. In total there is data from three different CNC milling machines each executing 15 processes. For a detailed description of the data and experimental set-up, please refer to the paper. 
 
-## Dataset:
+## Dataset Description
+The dataset contains real-world industrial vibration data collected from brownfield CNC milling machines with the following characteristics:
 
-The data are located in the `data` folder.
+- **Sensor:** Tri-axial accelerometer (Bosch CISS Sensor) mounted inside the machine
+- **Axes:** X, Y, and Z-axes recorded
+- **Sampling Rate:** 2 kHz
+- **Time Periods:** 6 different timeframes, each lasting 6 months from October 2018 to August 2021
+- **Machines:** 3 different CNC milling machines
+- **Processes:** 15 processes per machine
+- **Data Types:** Normal and anomalous data labeled accordingly
 
-### Folder structure: 
+## Setup Instructions
 
-The `data` directory containing the manually annotated machine processes is structured as follows:
+### Step 1: Download the Dataset
+1. **Clone the original repository:**
+   ```bash
+   git clone https://github.com/boschresearch/CNC_Machining.git
+   ```
+
+2. **Navigate to the cloned repository:**
+   ```bash
+   cd CNC_Machining
+   ```
+
+3. **Copy the data files to your project directory:**
+   ```bash
+   cp -r CNC_milling_data/* /path/to/your/project/data/CNC_Machining/
+   ```
+   
+   **Alternative: Direct download and extraction**
+   If the repository contains compressed data files, extract them directly into `data/CNC_Machining/`.
+
+### Step 2: Verify Directory Structure
+After copying the data, your `data/CNC_Machining/` directory should contain:
 ```
-data/
-    machine number/             Corresponding machine number. We have data from 3 machines (M01, M02, M03)
-        process number/         Coresponding process number. We have 15 different processes (OP00, .., OP14)
-            label/              Coresponding process health. "good": Normal vibrational data, "bad": Anomalous vibrational data
-                filename:       .h5 file containing the vibration data. The files are annotated as follows: Machine no. + timeframe + Process no + example no. e.g. M02_Aug_2019_OP03_000.h5
-    
+data/CNC_Machining/
+├── README.md                 # This file
+├── preprocess_ds.py         # Preprocessing script
+├── test_idx.npy            # Test indices
+├── val_idx.npy             # Validation indices
+└── [Raw data directories]   # Your downloaded dataset files (.h5 format)
 ```
 
-### Data structure: 
-
-The .h5 file contains the label of the process and is structured as follows: 
+The raw data should be organized in the following structure:
 ```
-   vibration data         the dataset contains a ndarray of dimension (acc_values, n_channels). (n_channels: acceleration axis: 0: X-axis, 1:Y-axis, 2:Z-axis)
-    
+Machine_X/
+├── TimeFrame_Y/
+│   ├── good/
+│   │   └── *.h5 files
+│   └── bad/
+│       └── *.h5 files
 ```
 
-## Code
+### Step 3: Run Preprocessing
+Execute the preprocessing script to convert and prepare the data:
 
-### Installation Requirements
+```bash
+cd data/CNC_Machining
+python preprocess_ds.py
+```
 
-The code provided for loading the data has been written in Python 3.11. You need the following conda packages: `h5py`, `numpy` and `matplotlib`. The script `utils/data_loader_utils.py` proposes functions to load and vizualize the data. The notebook `Data_explorer.ipynb` shows how those functions can be used.
+**What the preprocessing does:**
+1. **Convert H5 to NumPy:** Converts `.h5` files to `.npy` format for faster loading
+2. **Moving Average:** Applies moving average smoothing (window_size=300, step_size=150)
+3. **Sequence Normalization:** Scales all sequences to a fixed length of 2000 timesteps
+4. **Window Splitting:** Splits each sequence into 10 smaller windows for data augmentation
+5. **Label Processing:** Creates binary labels (1 for 'good', 0 for 'bad')
 
+**Output files:**
+- `mvg_data_scaled.npy`: Preprocessed vibration data
+- `mvg_labels.npy`: Corresponding binary labels
 
-## License
-The code in this repository is open-sourced under the BSD-3-Clause license. See the [License](utils/License) file for details.
+### Step 4: Verify Preprocessing Success
+After preprocessing, check that the output files were created:
 
-The dataset created for the research located in the directory [data](data) are licensed under a [Creative Commons Attribution 4.0 International
-License](http://creativecommons.org/licenses/by/4.0/) (CC-BY-4.0).
+```bash
+ls -la *.npy
+```
+
+You should see:
+- `mvg_data_scaled.npy` - Processed vibration data
+- `mvg_labels.npy` - Binary labels
+- `test_idx.npy` - Test set indices (pre-existing)
+- `val_idx.npy` - Validation set indices (pre-existing)
