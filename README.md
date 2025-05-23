@@ -1,4 +1,4 @@
-# ASIMOW XAI Paper Checkliste
+# EXCODER: EXplainable Classification Of DiscretE time series Representations
 
 ## Install Python Environment
 ```bash
