@@ -61,6 +61,41 @@ def get_model_predictions(
     model_outputs = torch.cat(model_outputs)
     return model_outputs
 
+def get_most_relevant_subsequences_starting_index_top_k(
+    explanations: torch.Tensor, subseq_len: int, top_k: int = 1
+):
+    """
+    Find the starting index of the most relevant subsequence for each instance.
+    
+    This function identifies the most important subsequence of length subseq_len
+    in each instance according to the explanation values. It does this by sliding
+    a window of size subseq_len over the explanation values and summing them.
+
+    Args:
+        explanations: Tensor of explanation values with shape (dataset_size, input_size*in_dim)
+        subseq_len: Length of subsequence to consider
+        top_k: Number of most relevant subsequences to consider
+        
+    Returns:
+        torch.Tensor: Starting indices of the most relevant subsequence for each instance
+    """
+    # assert that the shape of the explanations is (dataset_size, input_size*in_dim)
+    assert explanations.dim() == 2
+    dataset_size, input_size = explanations.shape
+
+    amount_of_subsequences = input_size - subseq_len + 1
+    subsequence_relevances = torch.zeros(dataset_size, amount_of_subsequences)
+    most_relevant_subsequences = torch.zeros((dataset_size, top_k), dtype=torch.long)
+
+    for feature_index in range(amount_of_subsequences):
+        subsequence_relevances[:, feature_index] = explanations[:, feature_index : feature_index + subseq_len].sum(dim=1)
+    
+    for i in range(dataset_size):
+        top_k_indices = subsequence_relevances[i].topk(top_k).indices
+        most_relevant_subsequences[i] = top_k_indices
+
+    return most_relevant_subsequences
+
 def get_most_relevant_subsequences_starting_index(
     explanations: torch.Tensor, subseq_len: int
 ):
@@ -138,7 +173,7 @@ def get_match_matrix_for_instances_with_same_subsequence(
     # reshape dataset to (dataset_size, input_size*in_dim)
     reshaped_dataset = dataset.reshape(dataset.size(0), -1)
     reshaped_train_dataset = train_dataset.reshape(train_dataset.size(0), -1)
-    reshaped_dataset_size, seq_length = reshaped_dataset.size()
+    reshaped_dataset_size, _ = reshaped_dataset.size()
     reshaped_train_dataset_size, _ = reshaped_train_dataset.size()
     match_matrix = torch.zeros((reshaped_dataset_size, reshaped_train_dataset_size), dtype=torch.int32)
 
@@ -170,7 +205,7 @@ def analyze_match_matrix(match_matrix, ground_truth_labels, predictions):
             - percentage_correct: Percentage of matching instances with the same
                                  predicted class for each test instance
     """
-    num_instances = match_matrix.size(0)#
+    num_instances = match_matrix.size(0)
     size_of_comparison_set = match_matrix.size(1)
     num_matches = match_matrix.sum(dim=1)
     percentage_correct = torch.zeros(num_instances, dtype=torch.float32)
@@ -372,7 +407,8 @@ def main(
     explanations: torch.Tensor, 
     model_predictions: torch.Tensor, 
     train_dataset: torch.Tensor, 
-    train_target: torch.Tensor
+    train_target: torch.Tensor,
+    top_k: int = 1
 ) -> dict[str, Any]:
     """
     Calculate Similar Subsequence Accuracy (SSA) for the given dataset and explanations.
@@ -394,6 +430,7 @@ def main(
         train_dataset (torch.Tensor): Training dataset tensor with shape 
             (train_dataset_size, input_size, in_dim) for finding instances with similar subsequences
         train_target (torch.Tensor): Training dataset class labels with shape (train_dataset_size,)
+        top_k (int): Number of most relevant subsequences to consider
         
     Returns:
         dict[str, Any]: Dictionary containing evaluation results:
@@ -405,34 +442,64 @@ def main(
             - instances_with_enough_neighbours (int): Count of instances with sufficient matches
             - conf (dict): Copy of the configuration
     """
-    # for each instance: get the index of the most relevant subsequence
-    most_relevant_subsequences_starting_index = get_most_relevant_subsequences_starting_index(explanations=explanations, subseq_len=conf["subseq_len"])
+    most_relevant_subsequences_starting_index_top_k = get_most_relevant_subsequences_starting_index_top_k(explanations=explanations, subseq_len=conf["subseq_len"], top_k=top_k)
+    
+    ssa_mean = []
+    ssa_weighted_mean = []
+    ssa_meaned_over_classes = []
+    num_matches = []
+    percentage_correct = []
+    num_matches_enough_neighbours = []
+    most_relevant_subsequences_starting_index = []
+    most_relevant_codebook_indices = []
 
-    # for each instance: get the actual most relevant subsequence by querying the dataset with the most relevant subsequence index
-    subsequences_dataset = get_subsequences_from_indices(dataset, most_relevant_subsequences_starting_index, conf["subseq_len"])
+    for i in range(most_relevant_subsequences_starting_index_top_k.shape[1]):
+        most_relevant_subsequences_starting_index_top_k_i = most_relevant_subsequences_starting_index_top_k[:, i]
+        subsequences_dataset_i = get_subsequences_from_indices(dataset, most_relevant_subsequences_starting_index_top_k_i, conf["subseq_len"])
+        match_matrix_i = get_match_matrix_for_instances_with_same_subsequence(dataset, train_dataset, subsequences_dataset_i, most_relevant_subsequences_starting_index_top_k_i, conf["subseq_len"])
+        num_matches_i, percentage_correct_i = analyze_match_matrix(match_matrix_i, train_target, model_predictions)
+        num_matches_enough_neighbours_i, ssa_mean_i, ssa_weighted_mean_i, ssa_meaned_over_classes_i = clean_up_match_matrix_analysis_and_return_ssa(num_matches_i, percentage_correct_i, conf["min_amount_similar_subseq"], target)
+        logging.info("--------------------------------")
+        logging.info(f"SSA for top {i+1} most relevant subsequences: {ssa_mean_i}")
+        logging.info("Average amount of similar subsequences: {:.2f}".format(num_matches_i.float().mean().item()))
+        logging.info(f"Instances with at least {conf['min_amount_similar_subseq']} \"neighbours\": {len(num_matches_enough_neighbours_i)}/{len(num_matches_i)}")
+        logging.info("SSA Mean: {:.2f}".format(ssa_mean_i))
+        logging.info("SSA Weighted Mean: {:.2f}".format(ssa_weighted_mean_i))
+        logging.info("SSA Meaned over classes: {:.2f}".format(ssa_meaned_over_classes_i))
+        ssa_mean.append(ssa_mean_i)
+        ssa_weighted_mean.append(ssa_weighted_mean_i)
+        ssa_meaned_over_classes.append(ssa_meaned_over_classes_i)
+        num_matches.append(num_matches_i)
+        percentage_correct.append(percentage_correct_i)
+        num_matches_enough_neighbours.append(len(num_matches_enough_neighbours_i))
+        most_relevant_subsequences_starting_index.append(most_relevant_subsequences_starting_index_top_k_i)
+        most_relevant_codebook_indices.append(subsequences_dataset_i.squeeze(-1))
 
-    # get a binary matrix where each row represents the instances and each column represents the instances with a 1 if they have the same subsequence in the same position
-    match_matrix = get_match_matrix_for_instances_with_same_subsequence(dataset, train_dataset, subsequences_dataset, most_relevant_subsequences_starting_index, conf["subseq_len"])
+    if top_k == 1:
+        ssa_mean = ssa_mean[0]
+        ssa_weighted_mean = ssa_weighted_mean[0]
+        ssa_meaned_over_classes = ssa_meaned_over_classes[0]
+        num_matches = num_matches[0]
+        percentage_correct = percentage_correct[0]
+        num_matches_enough_neighbours = num_matches_enough_neighbours[0]
+        most_relevant_codebook_indices = most_relevant_codebook_indices[0]
+    else: 
+        num_matches = torch.stack(num_matches)
+        percentage_correct = torch.stack(percentage_correct)
+        most_relevant_subsequences_starting_index = torch.stack(most_relevant_subsequences_starting_index)
+        most_relevant_codebook_indices = torch.stack(most_relevant_codebook_indices)
 
-    # for each instance: analyze the match matrix and return the number of matches and the percentage of instances that have the same ground truth label as predicted by the model for the respective instance
-    num_matches, percentage_correct = analyze_match_matrix(match_matrix, train_target, model_predictions)
-
-    # for each instance: clean up the analysis by removing instances with less than min_amount_similar_subseq or more than max_amount_similar_subseq and return the SSA, which is the average percentage of correct predictions for the instances with valid amount of similar subsequences
-    num_matches_enough_neighbours, ssa_mean, ssa_weighted_mean, ssa_meaned_over_classes = clean_up_match_matrix_analysis_and_return_ssa(num_matches, percentage_correct, conf["min_amount_similar_subseq"], target)
-
-    logging.info("Average amount of similar subsequences: {:.2f}".format(num_matches.float().mean().item()))
-    logging.info(f"Instances with at least {conf['min_amount_similar_subseq']} \"neighbours\": {len(num_matches_enough_neighbours)}/{len(num_matches)}")
-    logging.info("SSA Mean: {:.2f}".format(ssa_mean))
-    logging.info("SSA Weighted Mean: {:.2f}".format(ssa_weighted_mean))
-    logging.info("SSA Meaned over classes: {:.2f}".format(ssa_meaned_over_classes))
 
     dict_to_save = {
         "ssa_mean": ssa_mean,
         "ssa_weighted_mean": ssa_weighted_mean,
         "ssa_meaned_over_classes": ssa_meaned_over_classes,
         "num_matches": num_matches,
+        "model_predictions": model_predictions,
         "percentage_correct": percentage_correct,
-        "instances_with_enough_neighbours": len(num_matches_enough_neighbours),
+        "instances_with_enough_neighbours": num_matches_enough_neighbours,
+        "most_relevant_subsequences_starting_index": most_relevant_subsequences_starting_index,
+        "most_relevant_codebook_indices": most_relevant_codebook_indices,
         "conf": conf.copy(),
     }
     return dict_to_save
