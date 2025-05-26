@@ -1,13 +1,10 @@
-import torch.nn as nn
 import torch
-from abc import abstractmethod
-from torch.nn import functional as F
-import lightning.pytorch as pl
 from xai_methods.xai_blackbox_base import BlackBoxExplainer
 import lime
 import lime.lime_tabular
 import numpy as np
 from tqdm import tqdm
+from pathlib import Path
 
 
 def create_feature_strings(input_size: int = 17):
@@ -73,10 +70,10 @@ class Lime(BlackBoxExplainer):
 
     def explain(
         self,
-        input_tensor: torch.Tensor,
+        input_tensor: torch.Tensor | np.ndarray,
         return_exp_as_well: bool = False,
         save_to_pickle=False,
-        save_path="lime_explanations.pkl",
+        save_path: str | Path = "lime_explanations.pkl",
     ) -> tuple:
         """
         Make sure the input_tensor gets turned in to an array
