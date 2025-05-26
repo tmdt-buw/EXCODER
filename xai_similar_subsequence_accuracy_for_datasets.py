@@ -452,6 +452,7 @@ def main(
     num_matches_enough_neighbours = []
     most_relevant_subsequences_starting_index = []
     most_relevant_codebook_indices = []
+    explaination_scores = []
 
     for i in range(most_relevant_subsequences_starting_index_top_k.shape[1]):
         most_relevant_subsequences_starting_index_top_k_i = most_relevant_subsequences_starting_index_top_k[:, i]
@@ -474,6 +475,7 @@ def main(
         num_matches_enough_neighbours.append(len(num_matches_enough_neighbours_i))
         most_relevant_subsequences_starting_index.append(most_relevant_subsequences_starting_index_top_k_i)
         most_relevant_codebook_indices.append(subsequences_dataset_i.squeeze(-1))
+        explaination_scores.append(explanations[torch.arange(explanations.shape[0]), most_relevant_subsequences_starting_index_top_k_i])
 
     if top_k == 1:
         ssa_mean = ssa_mean[0]
@@ -483,11 +485,14 @@ def main(
         percentage_correct = percentage_correct[0]
         num_matches_enough_neighbours = num_matches_enough_neighbours[0]
         most_relevant_codebook_indices = most_relevant_codebook_indices[0]
+        explaination_scores = explaination_scores[0]
     else: 
-        num_matches = torch.stack(num_matches)
-        percentage_correct = torch.stack(percentage_correct)
-        most_relevant_subsequences_starting_index = torch.stack(most_relevant_subsequences_starting_index)
-        most_relevant_codebook_indices = torch.stack(most_relevant_codebook_indices)
+        # convert to numpy
+        num_matches = torch.stack(num_matches).numpy()
+        percentage_correct = torch.stack(percentage_correct).numpy()
+        most_relevant_subsequences_starting_index = torch.stack(most_relevant_subsequences_starting_index).numpy()
+        most_relevant_codebook_indices = torch.stack(most_relevant_codebook_indices).numpy()
+        explaination_scores = torch.stack(explaination_scores).numpy()
 
 
     dict_to_save = {
@@ -500,6 +505,7 @@ def main(
         "instances_with_enough_neighbours": num_matches_enough_neighbours,
         "most_relevant_subsequences_starting_index": most_relevant_subsequences_starting_index,
         "most_relevant_codebook_indices": most_relevant_codebook_indices,
+        "explaination_scores": explaination_scores,
         "conf": conf.copy(),
     }
     return dict_to_save
