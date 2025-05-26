@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import logging
 from copy import deepcopy
+from typing import Any
 from lightning import seed_everything
 import torch
 import pickle
@@ -231,7 +232,7 @@ def clean_up_match_matrix_analysis_and_return_ssa(
     return num_matches_enough_neighbours, ssa_mean, ssa_weighted_mean, ssa_meaned_over_classes
 
 def get_dataset_and_model_and_explanations(
-    dataset_name: DATASET_NAMES, model_type: MODEL_NAMES, conf: dict[str, any]
+    dataset_name: DATASET_NAMES, model_type: MODEL_NAMES, conf: dict[str, Any]
 ):
     """
     Load model, datasets, and explanations for the SSA evaluation.
@@ -322,7 +323,7 @@ def get_dataset_and_model_and_explanations(
         explanations = explanations[:200]
     return model, dataset, target, explanations, train_dataset, train_target
 
-def prepare_for_subsequence_iteration(conf: dict[str, any]):
+def prepare_for_subsequence_iteration(conf: dict[str, Any]):
     """
     Prepare data for the SSA evaluation by loading and preprocessing everything needed.
     
@@ -364,7 +365,15 @@ def prepare_for_subsequence_iteration(conf: dict[str, any]):
 
     return dataset, target, explanations, model_predictions, train_dataset, train_target
 
-def main(conf: dict[str, any], dataset, target, explanations, model_predictions, train_dataset, train_target):
+def main(
+    conf: dict[str, Any], 
+    dataset: torch.Tensor, 
+    target: torch.Tensor, 
+    explanations: torch.Tensor, 
+    model_predictions: torch.Tensor, 
+    train_dataset: torch.Tensor, 
+    train_target: torch.Tensor
+) -> dict[str, Any]:
     """
     Calculate Similar Subsequence Accuracy (SSA) for the given dataset and explanations.
     
@@ -374,23 +383,27 @@ def main(conf: dict[str, any], dataset, target, explanations, model_predictions,
     explanations, as they identify subsequences that are truly predictive of the class.
     
     Args:
-        conf: Configuration dictionary with parameters
-        dataset: Input dataset tensor
-        target: Ground truth labels
-        explanations: Feature importance values from XAI method
-        model_predictions: Model's predictions for the dataset
-        train_dataset: Training dataset for finding instances with similar subsequences
-        train_target: Training dataset labels
+        conf (dict[str, Any]): Configuration dictionary with parameters including:
+            - subseq_len (int): Length of subsequences to analyze
+            - min_amount_similar_subseq (int): Minimum number of matches required
+        dataset (torch.Tensor): Input dataset tensor with shape (dataset_size, input_size, in_dim)
+        target (torch.Tensor): Ground truth class labels with shape (dataset_size,)
+        explanations (torch.Tensor): Feature importance values from XAI method with shape 
+            (dataset_size, input_size*in_dim)
+        model_predictions (torch.Tensor): Model's predicted class indices with shape (dataset_size,)
+        train_dataset (torch.Tensor): Training dataset tensor with shape 
+            (train_dataset_size, input_size, in_dim) for finding instances with similar subsequences
+        train_target (torch.Tensor): Training dataset class labels with shape (train_dataset_size,)
         
     Returns:
-        dict: Dictionary containing evaluation results:
-            - ssa_mean: Mean SSA score
-            - ssa_weighted_mean: Mean SSA weighted by number of matches
-            - ssa_meaned_over_classes: Mean SSA across classes
-            - num_matches: Number of similar subsequence matches per instance
-            - percentage_correct: Percentage of correct predictions per instance
-            - instances_with_enough_neighbours: Count of instances with sufficient matches
-            - conf: Copy of the configuration
+        dict[str, Any]: Dictionary containing evaluation results:
+            - ssa_mean (float): Mean SSA score
+            - ssa_weighted_mean (float): Mean SSA weighted by number of matches
+            - ssa_meaned_over_classes (float): Mean SSA across classes
+            - num_matches (torch.Tensor): Number of similar subsequence matches per instance
+            - percentage_correct (torch.Tensor): Percentage of correct predictions per instance
+            - instances_with_enough_neighbours (int): Count of instances with sufficient matches
+            - conf (dict): Copy of the configuration
     """
     # for each instance: get the index of the most relevant subsequence
     most_relevant_subsequences_starting_index = get_most_relevant_subsequences_starting_index(explanations=explanations, subseq_len=conf["subseq_len"])
@@ -426,7 +439,7 @@ def main(conf: dict[str, any], dataset, target, explanations, model_predictions,
     # with open(output_path, "wb") as f:
     #     pickle.dump(dict_to_save, f)
 
-def run_xai_method(conf: dict[str, any]):
+def run_xai_method(conf: dict[str, Any]):
     """
     Run SSA evaluation for multiple datasets, models, XAI methods, and subsequence lengths.
     
