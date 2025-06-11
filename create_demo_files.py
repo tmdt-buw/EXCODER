@@ -222,9 +222,11 @@ def main(conf: dict[str, any]):
 
     
     if output_path.exists():
+        logging.info(f"Loading LIME explanations from {output_path}")
         with open(output_path, "rb") as f:
             lime_explanations = pickle.load(f)
     else:
+        logging.info(f"Creating LIME explanations for {output_path}")
         lime_class_names = ["Bad", "Good"]
         logging.info(
             f"LIME dataset shape: {x_data.shape} dtype: {x_data.dtype}"
@@ -281,9 +283,11 @@ def main(conf: dict[str, any]):
     train_ds_y = torch.stack([train_ds[i][1] for i in range(train_dataset_size)])
 
     model_predictions = predict_model(model, x_data)
+    logging.info(f"Model predictions shape: {model_predictions.shape}")
 
     conf["subseq_len"] = 1
     conf["min_amount_similar_subseq"] = 20
+    logging.info(f"Computing SSA for {conf['new_ds_name']}")
     ssa_results = compute_ssa(
         conf=conf, 
         dataset=torch.tensor(x_data, dtype=torch.long), 
