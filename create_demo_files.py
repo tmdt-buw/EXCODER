@@ -314,10 +314,21 @@ def main(conf: dict[str, any]):
 
 
 def get_data_files(data_path: Path):
+    """
+    Get the data files from the data path.
+    The data files are the files that end with _x.npy and are in the format {number}_{number}_x.npy
+    The function returns the names of the data files without the _x.npy extension.
+
+    Args:
+        data_path (Path): The path to the data directory.
+
+    Returns:
+        list[str]: The names of the data files without the _x.npy extension.
+    """
     all_npy_files = list(data_path.glob("*.npy"))
-    pattern = re.compile(r'^\d+_\d+\.npy$')
+    pattern = re.compile(r'^\d+_\d+_x\.npy$')
     data_files = [f for f in all_npy_files if pattern.match(f.name)]
-    data_files = [f.stem for f in data_files]
+    data_files = [f.stem.replace("_x", "") for f in data_files]
     return data_files
 
 
