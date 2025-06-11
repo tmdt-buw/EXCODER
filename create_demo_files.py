@@ -1,4 +1,5 @@
 import argparse
+import re
 from pathlib import Path
 import pickle
 import logging
@@ -203,6 +204,11 @@ def main(conf: dict[str, any]):
         / f"{xai_method}_{conf['new_ds_name']}_explanations.pkl"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path_ssa = output_path.parent / f"ssa_results_{conf['new_ds_name']}.pkl"
+
+    if output_path_ssa.exists():
+        logging.info(f"SSA results already exist for {conf['new_ds_name']}")
+        return
     model_path = (
         project_path
         / "model_checkpoints/best_models"
@@ -285,7 +291,7 @@ def main(conf: dict[str, any]):
 
     model_predictions = predict_model(model, x_data)
     logging.info(f"Model predictions shape: {model_predictions.shape}")
-    
+
     conf["subseq_len"] = 1
     conf["min_amount_similar_subseq"] = 20
     logging.info(f"Computing SSA for {conf['new_ds_name']}")
@@ -301,10 +307,18 @@ def main(conf: dict[str, any]):
     )
 
     # save ssa results to a pickle file
-    with open(output_path.parent / f"ssa_results_{conf['new_ds_name']}.pkl", "wb") as f:
+    with open(output_path_ssa, "wb") as f:
         pickle.dump(ssa_results, f)
 
     return ssa_results
+
+
+def get_data_files(data_path: Path):
+    all_npy_files = list(data_path.glob("*.npy"))
+    pattern = re.compile(r'^\d+_\d+\.npy$')
+    data_files = [f for f in all_npy_files if pattern.match(f.name)]
+    data_files = [f.stem for f in data_files]
+    return data_files
 
 
 if __name__ == "__main__":
@@ -329,7 +343,9 @@ if __name__ == "__main__":
 
 
 
-    new_ds_names = ["1_28", "3_5", "3_10", "3_11", "3_14", "4_7", "4_28", "4_33", "4_49"]
+    new_ds_names = get_data_files(Path(conf["data_path"]) / conf["dataset_name"])
+    print(new_ds_names)
+
     for new_ds_name in new_ds_names:
         conf["new_ds_name"] = new_ds_name
         logging.info(f"Configuration: {conf}")
