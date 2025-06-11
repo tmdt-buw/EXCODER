@@ -31,15 +31,15 @@ from params import (
 
 def load_new_ts_data(path: Path, file_name: str, scaler: MyScaler | StandardScaler):
     """Load and preprocess time series data for inference.
-    
+
     This function loads time series data and labels from numpy files, applies
     scaling transformation, and creates a PyTorch DataLoader for batch processing.
-    
+
     Args:
         path (Path): Directory path containing the data files.
         file_name (str): Base name of the data files (without extension).
         scaler (MyScaler | StandardScaler): Fitted scaler for data normalization.
-        
+
     Returns:
         DataLoader: PyTorch DataLoader containing the preprocessed data and labels.
     """
@@ -54,19 +54,19 @@ def load_new_ts_data(path: Path, file_name: str, scaler: MyScaler | StandardScal
 
 def get_scaler(dataset_name: DATASET_NAMES, data_path: Path, project_path: Path):
     """Get the fitted scaler for a specific dataset.
-    
+
     This function loads the validation and test indices, creates a dataset module,
     sets it up, and returns the fitted scaler used for data normalization.
-    
+
     Args:
         dataset_name (DATASET_NAMES): Name of the dataset.
         data_path (Path): Path to the data directory.
         project_path (Path): Path to the project root directory.
-        
+
     Returns:
         MyScaler | StandardScaler: Fitted scaler for the dataset.
     """
-    
+
     val_idx, test_idx = load_val_test_idx(project_path / data_path / dataset_name)
 
     data_module: DATASET_MODULES = get_dataset_module(conf["dataset_name"])(
@@ -90,11 +90,11 @@ def create_latent_ds(
         conf: dict[str, Any] = None
     ):
     """Create latent space dataset using VQ-VAE model.
-    
+
     This function loads new time series data, passes it through a pre-trained
     VQ-VAE model to create latent representations, and adds start tokens for
     autoregressive modeling.
-    
+
     Args:
         data_path (Path): Path to the data directory.
         dataset_name (DATASET_NAMES): Name of the dataset.
@@ -102,7 +102,7 @@ def create_latent_ds(
         scaler (MyScaler | StandardScaler): Fitted scaler for data normalization.
         device (torch.device | str, optional): Device for computation. Defaults to "cpu".
         conf (dict[str, Any], optional): Configuration dictionary. Defaults to None.
-        
+
     Returns:
         tuple[np.ndarray, np.ndarray]: Tuple containing the latent representations
             with start tokens and the corresponding labels.
@@ -119,7 +119,7 @@ def create_latent_ds(
         no_labels=False,
         device=device,
     )
-    start_token = num_embeddings + 1 
+    start_token = num_embeddings + 1
     start_vec = np.full((len(x_data),), fill_value=start_token)
     x_data = np.concatenate([start_vec[:, None], x_data], axis=1)
 
@@ -127,14 +127,14 @@ def create_latent_ds(
 
 def model_init(model_path: Path):
     """Initialize and configure a transformer decoder model from checkpoint.
-    
+
     This function loads a MyTransformerDecoder model from a checkpoint file and
     sets up the necessary hyperparameters and attributes for inference with
     latent input data.
-    
+
     Args:
         model_path (Path): Path to the model checkpoint file.
-        
+
     Returns:
         MyTransformerDecoder: Loaded and configured transformer model.
     """
@@ -156,19 +156,20 @@ def predict_model(model: MyTransformerDecoder, dataset: torch.Tensor):
     model.eval()
     predictions = []
     for batch in dataloader:
+        batch = batch.to(model.device)
         logits = model(batch, generate=False)
         predictions.append(logits.argmax(dim=1))
-    return torch.cat(predictions)
+    return torch.cat(predictions).cpu()
 
 
 
-def main(conf: dict[str, any]): 
+def main(conf: dict[str, any]):
     """Main function to generate XAI explanations for time series models.
-    
+
     This function orchestrates the entire pipeline for generating explainable AI
     explanations on time series data. It loads data, creates latent representations,
     initializes the model, and generates explanations using the specified XAI method.
-    
+
     Args:
         conf (dict[str, any]): Configuration dictionary containing:
             - seed (int): Random seed for reproducibility
@@ -284,21 +285,21 @@ def main(conf: dict[str, any]):
 
     model_predictions = predict_model(model, x_data)
     logging.info(f"Model predictions shape: {model_predictions.shape}")
-
+    
     conf["subseq_len"] = 1
     conf["min_amount_similar_subseq"] = 20
     logging.info(f"Computing SSA for {conf['new_ds_name']}")
     ssa_results = compute_ssa(
-        conf=conf, 
-        dataset=torch.tensor(x_data, dtype=torch.long), 
-        target=torch.tensor(labels, dtype=torch.long), 
-        explanations=lime_explanations.reshape(lime_explanations.shape[0], -1), 
-        model_predictions=model_predictions, 
-        train_dataset=train_ds_x, 
+        conf=conf,
+        dataset=torch.tensor(x_data, dtype=torch.long),
+        target=torch.tensor(labels, dtype=torch.long),
+        explanations=lime_explanations.reshape(lime_explanations.shape[0], -1),
+        model_predictions=model_predictions,
+        train_dataset=train_ds_x,
         train_target=train_ds_y,
         top_k=3
     )
-    
+
     # save ssa results to a pickle file
     with open(output_path.parent / f"ssa_results_{conf['new_ds_name']}.pkl", "wb") as f:
         pickle.dump(ssa_results, f)
@@ -318,12 +319,18 @@ if __name__ == "__main__":
     args.add_argument("--data-path", type=str, default="data")
     args.add_argument("--lime-num-samples", type=int, default=1000)
     args.add_argument("--batch-size", type=int, default=512)
-    args.add_argument("--new-ds-name", type=str, default="1_14")
+    args.add_argument("--new-ds-name", type=str, default="1_28")
     args.add_argument("--seed", type=int, default=0)
     args.add_argument("--n-cycles", type=int, default=1)
     args.add_argument("--path-vq-vae", type=str, default="model_checkpoints/best_models/VQ-VAE_Welding.ckpt")
     conf = vars(args.parse_args())
     conf["path_vq_vae"] = Path(conf["path_vq_vae"])
     conf["dataset"] = conf["dataset_name"]
-    logging.info(f"Configuration: {conf}")
-    main(conf)
+
+
+
+    new_ds_names = ["1_28", "3_5", "3_10", "3_11", "3_14", "4_7", "4_28", "4_33", "4_49"]
+    for new_ds_name in new_ds_names:
+        conf["new_ds_name"] = new_ds_name
+        logging.info(f"Configuration: {conf}")
+        main(conf)
