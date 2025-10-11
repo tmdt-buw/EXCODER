@@ -500,7 +500,7 @@ def main(
         "ssa_weighted_mean": ssa_weighted_mean,
         "ssa_meaned_over_classes": ssa_meaned_over_classes,
         "num_matches": num_matches,
-        "model_predictions": model_predictions,
+        "model_predictions": model_predictions.numpy(),
         "percentage_correct": percentage_correct,
         "instances_with_enough_neighbours": num_matches_enough_neighbours,
         "most_relevant_subsequences_starting_index": most_relevant_subsequences_starting_index,
