@@ -17,3 +17,4 @@ dummy.ipynb
 .vscode/
 .venv/
 .idea/
+uv.lock
