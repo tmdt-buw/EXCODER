@@ -1,5 +1,9 @@
 import argparse
 import logging
+import time
+import csv
+from pathlib import Path
+from datetime import datetime
 from params import DATASET_NAMES, MODEL_NAMES, XAI_METHODS
 from xai_explain_datasets import main as explain_datasets
 
@@ -154,20 +158,92 @@ def get_standard_conf(
     return conf
 
 
-def run_explainations(use_small_subset: bool = False, data_path: str = "data"):
+def timed_explain_datasets(conf: dict, csv_path: str = "timing_results.csv"):
+    """
+    Wrapper function that times the explain_datasets method and logs results to CSV.
+    
+    Args:
+        conf: Configuration dictionary for explain_datasets
+        csv_path: Path to the CSV file where timing results will be logged
+        
+    Returns:
+        None: Executes explain_datasets and logs timing to CSV
+    """
+    # Extract attributes for logging
+    model_type = conf["model_type"]
+    dataset_name = conf["dataset_name"]
+    xai_method = conf["xai_method"]
+    seed = conf["seed"]
+    
+    # Record start time
+    start_time = time.time()
+    
+    # Run the explain_datasets function
+    try:
+        explain_datasets(conf)
+        success = True
+        error_message = ""
+    except Exception as e:
+        success = False
+        error_message = str(e)
+        logging.error(f"Error running explanation: {e}")
+    
+    # Record end time and calculate duration
+    end_time = time.time()
+    duration = end_time - start_time
+    
+    # Prepare CSV row
+    csv_row = {
+        "timestamp": datetime.now().isoformat(),
+        "model_type": model_type,
+        "dataset_name": dataset_name,
+        "xai_method": xai_method,
+        "seed": seed,
+        "duration_seconds": duration,
+        "success": success,
+        "error_message": error_message
+    }
+    
+    # Check if CSV file exists to determine if we need to write headers
+    csv_file = Path(csv_path)
+    file_exists = csv_file.exists()
+    
+    # Write to CSV
+    with open(csv_path, 'a', newline='') as f:
+        fieldnames = ["timestamp", "model_type", "dataset_name", "xai_method", 
+                      "seed", "duration_seconds", "success", "error_message"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        
+        # Write header if file is new
+        if not file_exists:
+            writer.writeheader()
+        
+        writer.writerow(csv_row)
+    
+    logging.info(
+        f"Completed {xai_method} for {dataset_name} with {model_type} "
+        f"(seed {seed}) in {duration:.2f} seconds"
+    )
+    
+    if not success:
+        raise Exception(error_message)
+
+
+def run_explainations(use_small_subset: bool = False, data_path: str = "data", csv_path: str = "timing_results.csv"):
     """
     Run explanations for various combinations of models, datasets, and XAI methods.
     
     This function runs a grid search over specified models, datasets, XAI methods, and seeds,
     generating explanations for each combination. For each combination, it creates a
-    configuration and calls the explain_datasets function.
+    configuration and calls the explain_datasets function with timing.
     
     Args:
         use_small_subset: Whether to use a small subset of the data for testing
         data_path: Path to the data directory
+        csv_path: Path to the CSV file where timing results will be logged
         
     Returns:
-        None: Results are saved to disk as pickle files
+        None: Results are saved to disk as pickle files and timing is logged to CSV
     """
     dataset_names: list[DATASET_NAMES] = ["CNC_Machining", "Welding", "ECG"]
     model_types: list[MODEL_NAMES] = ["SAX_MLP", "VQ-VAE_MLP", "DVAE_MLP", "VQ-VAE_Transformer", "DVAE_Transformer", "TS_Transformer"]
@@ -185,7 +261,7 @@ def run_explainations(use_small_subset: bool = False, data_path: str = "data"):
                     logging.info(
                         f"Running explainations for {conf['dataset_name']} with {conf['model_type']} and {conf['xai_method']} and seed {conf['seed']}"
                     )
-                    explain_datasets(conf)
+                    timed_explain_datasets(conf, csv_path)
 
 
 if __name__ == "__main__":
@@ -195,7 +271,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, default="data")
     parser.add_argument("--use-small-subset", type=bool, default=True)
+    parser.add_argument("--csv-path", type=str, default="timing_results.csv", 
+                        help="Path to CSV file for logging timing results")
     args = parser.parse_args()
     use_small_subset = args.use_small_subset
     data_path = args.data_path
-    run_explainations(use_small_subset, data_path)
+    csv_path = args.csv_path
+    run_explainations(use_small_subset, data_path, csv_path)
