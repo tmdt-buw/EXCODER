@@ -194,7 +194,7 @@ if __name__ == "__main__":
     )
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, default="data")
-    parser.add_argument("--use-small-subset", type=bool, default=False)
+    parser.add_argument("--use-small-subset", type=bool, default=True)
     args = parser.parse_args()
     use_small_subset = args.use_small_subset
     data_path = args.data_path
