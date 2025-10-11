@@ -6,6 +6,7 @@ __pycache__/
 
 
 model_checkpoints/*
+model_checkpoints
 lightning_logs/
 logs/*
 checkpoints/*
