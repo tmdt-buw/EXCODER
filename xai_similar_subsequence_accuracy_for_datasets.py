@@ -19,12 +19,12 @@ from utils import get_classification_models_and_data
 def return_predicted_class(model, model_type, input):
     """
     Get predicted class labels from a model for the given input.
-    
+
     Args:
         model: The model to use for prediction
         model_type: Type of the model (special handling for transformer-based models)
         input: Input tensor to classify
-        
+
     Returns:
         torch.Tensor: Predicted class indices (argmax of model output)
     """
@@ -42,13 +42,13 @@ def get_model_predictions(
 ):
     """
     Get model predictions for an entire dataset in batches.
-    
+
     Args:
         model: The model to use for prediction
         dataset: Input dataset tensor
         classification_batch_size: Batch size for inference
         model_type: Type of the model
-        
+
     Returns:
         torch.Tensor: Predicted class indices for the entire dataset
     """
@@ -61,20 +61,55 @@ def get_model_predictions(
     model_outputs = torch.cat(model_outputs)
     return model_outputs
 
+def get_most_relevant_subsequences_starting_index_top_k(
+    explanations: torch.Tensor, subseq_len: int, top_k: int = 1
+):
+    """
+    Find the starting index of the most relevant subsequence for each instance.
+
+    This function identifies the most important subsequence of length subseq_len
+    in each instance according to the explanation values. It does this by sliding
+    a window of size subseq_len over the explanation values and summing them.
+
+    Args:
+        explanations: Tensor of explanation values with shape (dataset_size, input_size*in_dim)
+        subseq_len: Length of subsequence to consider
+        top_k: Number of most relevant subsequences to consider
+
+    Returns:
+        torch.Tensor: Starting indices of the most relevant subsequence for each instance
+    """
+    # assert that the shape of the explanations is (dataset_size, input_size*in_dim)
+    assert explanations.dim() == 2
+    dataset_size, input_size = explanations.shape
+
+    amount_of_subsequences = input_size - subseq_len + 1
+    subsequence_relevances = torch.zeros(dataset_size, amount_of_subsequences)
+    most_relevant_subsequences = torch.zeros((dataset_size, top_k), dtype=torch.long)
+
+    for feature_index in range(amount_of_subsequences):
+        subsequence_relevances[:, feature_index] = explanations[:, feature_index : feature_index + subseq_len].sum(dim=1)
+
+    for i in range(dataset_size):
+        top_k_indices = subsequence_relevances[i].topk(top_k).indices
+        most_relevant_subsequences[i] = top_k_indices
+
+    return most_relevant_subsequences
+
 def get_most_relevant_subsequences_starting_index(
     explanations: torch.Tensor, subseq_len: int
 ):
     """
     Find the starting index of the most relevant subsequence for each instance.
-    
+
     This function identifies the most important subsequence of length subseq_len
     in each instance according to the explanation values. It does this by sliding
     a window of size subseq_len over the explanation values and summing them.
-    
+
     Args:
         explanations: Tensor of explanation values with shape (dataset_size, input_size*in_dim)
         subseq_len: Length of subsequence to consider
-        
+
     Returns:
         torch.Tensor: Starting indices of the most relevant subsequence for each instance
     """
@@ -88,7 +123,7 @@ def get_most_relevant_subsequences_starting_index(
 
     for feature_index in range(amount_of_subsequences):
         subsequence_relevances[:, feature_index] = explanations[:, feature_index : feature_index + subseq_len].sum(dim=1)
-    
+
     for i in range(dataset_size):
         most_relevant_subsequences[i] = subsequence_relevances[i].argmax()
 
@@ -99,12 +134,12 @@ def get_subsequences_from_indices(
 ):
     """
     Extract subsequences from a dataset at given starting indices.
-    
+
     Args:
         dataset: Input dataset tensor
         starting_indices: Starting indices for subsequence extraction for each instance
         subseq_len: Length of subsequences to extract
-        
+
     Returns:
         torch.Tensor: Extracted subsequences with shape (dataset_size, subseq_len)
     """
@@ -120,17 +155,17 @@ def get_match_matrix_for_instances_with_same_subsequence(
 ):
     """
     Create a binary match matrix indicating which training instances have the same subsequence.
-    
+
     For each instance in the dataset, this function identifies all instances in the training
     dataset that have the exact same subsequence at the same position.
-    
+
     Args:
         dataset: Input dataset tensor
         train_dataset: Training dataset tensor
         subsequences_dataset: Extracted subsequences from the input dataset
         starting_indices: Starting indices of subsequences for each instance
         subseq_len: Length of subsequences
-        
+
     Returns:
         torch.Tensor: Binary match matrix with shape (dataset_size, train_dataset_size)
                      where 1 indicates matching subsequences
@@ -138,14 +173,14 @@ def get_match_matrix_for_instances_with_same_subsequence(
     # reshape dataset to (dataset_size, input_size*in_dim)
     reshaped_dataset = dataset.reshape(dataset.size(0), -1)
     reshaped_train_dataset = train_dataset.reshape(train_dataset.size(0), -1)
-    reshaped_dataset_size, seq_length = reshaped_dataset.size()
+    reshaped_dataset_size, _ = reshaped_dataset.size()
     reshaped_train_dataset_size, _ = reshaped_train_dataset.size()
     match_matrix = torch.zeros((reshaped_dataset_size, reshaped_train_dataset_size), dtype=torch.int32)
 
     for i in tqdm(range(reshaped_dataset_size), desc="Matching instances"):
         start_idx = starting_indices[i]
         subsequence = subsequences_dataset[i]
-         
+
         all_subsequences_in_same_pos = reshaped_train_dataset[:, start_idx : start_idx + subseq_len]
         match_matrix[i] = torch.all(all_subsequences_in_same_pos == subsequence, dim=1).int()
     return match_matrix
@@ -153,24 +188,24 @@ def get_match_matrix_for_instances_with_same_subsequence(
 def analyze_match_matrix(match_matrix, ground_truth_labels, predictions):
     """
     Analyze the match matrix to compute correctness percentages.
-    
+
     For each test instance, this function:
     1. Identifies all training instances with matching subsequences
     2. Calculates the percentage of those matching instances that have the same
        predicted class as the test instance
-    
+
     Args:
         match_matrix: Binary matrix indicating matching subsequences
         ground_truth_labels: Ground truth labels for the training dataset
         predictions: Model predictions for the test dataset
-        
+
     Returns:
         tuple:
             - num_matches: Number of matching instances for each test instance
             - percentage_correct: Percentage of matching instances with the same
                                  predicted class for each test instance
     """
-    num_instances = match_matrix.size(0)#
+    num_instances = match_matrix.size(0)
     size_of_comparison_set = match_matrix.size(1)
     num_matches = match_matrix.sum(dim=1)
     percentage_correct = torch.zeros(num_instances, dtype=torch.float32)
@@ -188,18 +223,18 @@ def clean_up_match_matrix_analysis_and_return_ssa(
 ):
     """
     Calculate final Similar Subsequence Accuracy (SSA) metrics.
-    
+
     This function computes several SSA metrics:
     1. Mean SSA across instances with sufficient matches
     2. Weighted SSA (weighted by number of matches)
     3. Class-balanced SSA (average of class-specific SSAs)
-    
+
     Args:
         num_matches: Number of matching instances for each test instance
         percentage_correct: Percentage of matching instances with same predicted class
         min_amount_similar_subseq: Minimum number of matches required to include an instance
         target: Ground truth labels for test instances
-        
+
     Returns:
         tuple:
             - num_matches_enough_neighbours: Number of matches for valid instances
@@ -211,7 +246,7 @@ def clean_up_match_matrix_analysis_and_return_ssa(
     valid_indices = (num_matches >= min_amount_similar_subseq)
     num_matches_enough_neighbours = num_matches[valid_indices]
     percentage_correct_enough_neighbours = percentage_correct[valid_indices]
-    
+
     # weigh by the amount of similar subsequences
     total_matches = num_matches.sum().item()
     percentage_correct_weighted = percentage_correct * num_matches.float() / total_matches
@@ -220,7 +255,7 @@ def clean_up_match_matrix_analysis_and_return_ssa(
     ssa_weighted_mean = percentage_correct_weighted.sum().item()
 
     percentages_for_each_class = []
-    for i in range (len(target.unique())): 
+    for i in range (len(target.unique())):
         class_indices = (target == i)
         # class_percentage_correct = percentage_correct[class_indices].mean()
         class_percentage_correct = (percentage_correct[class_indices] * num_matches[class_indices].float() / num_matches[class_indices].sum()).sum().item()
@@ -236,12 +271,12 @@ def get_dataset_and_model_and_explanations(
 ):
     """
     Load model, datasets, and explanations for the SSA evaluation.
-    
+
     This function:
     1. Loads the model and test dataset
     2. Loads the training dataset for finding similar subsequences
     3. Loads pre-computed explanations or generates random explanations for baseline
-    
+
     Args:
         dataset_name: Name of the dataset to load
         model_type: Type of model to load
@@ -251,7 +286,7 @@ def get_dataset_and_model_and_explanations(
             - data_path: Path to data directory
             - seed: Random seed
             - use_small_subset: Whether to use a small subset of data
-            
+
     Returns:
         tuple:
             - model: The loaded model
@@ -260,7 +295,7 @@ def get_dataset_and_model_and_explanations(
             - explanations: Feature importance values from XAI method
             - train_dataset: Training dataset
             - train_target: Training dataset labels
-            
+
     Raises:
         FileNotFoundError: If explanation file cannot be found
     """
@@ -290,7 +325,7 @@ def get_dataset_and_model_and_explanations(
     train_target = torch.stack([train_dataset_complete[i][1] for i in range(train_dataset_size)])
     train_dataset = train_dataset.to(model.device)
     train_target = train_target.to(model.device)
-    logging.info(f"Train dataset shape: {train_dataset.shape}")	
+    logging.info(f"Train dataset shape: {train_dataset.shape}")
 
     if conf["xai_method"] == "RND":
         # get random explanations for baseline methods
@@ -307,7 +342,7 @@ def get_dataset_and_model_and_explanations(
         )
         if not explanation_path.exists():
             raise FileNotFoundError(f"Explanations not found: {explanation_path}")
-        
+
         with open(explanation_path, "rb") as f:
             explanation_dict = pickle.load(f)
         explanations = torch.tensor(explanation_dict["explanations"])
@@ -326,15 +361,15 @@ def get_dataset_and_model_and_explanations(
 def prepare_for_subsequence_iteration(conf: dict[str, Any]):
     """
     Prepare data for the SSA evaluation by loading and preprocessing everything needed.
-    
+
     This function:
     1. Sets the random seed
     2. Loads the model, datasets and explanations
     3. Gets model predictions for the test dataset
-    
+
     Args:
         conf: Configuration dictionary with parameters for the evaluation
-        
+
     Returns:
         tuple:
             - dataset: Test dataset
@@ -358,7 +393,7 @@ def prepare_for_subsequence_iteration(conf: dict[str, Any]):
     model, dataset, target, explanations, train_dataset, train_target = get_dataset_and_model_and_explanations(
         dataset_name, model_type, conf
     )
-    
+
     # for each instance: get the model prediction
     model_predictions = get_model_predictions(model, dataset, conf["batch_size"], conf["model_type"])
     logging.info("Got all model predictions for the dataset.")
@@ -366,35 +401,37 @@ def prepare_for_subsequence_iteration(conf: dict[str, Any]):
     return dataset, target, explanations, model_predictions, train_dataset, train_target
 
 def main(
-    conf: dict[str, Any], 
-    dataset: torch.Tensor, 
-    target: torch.Tensor, 
-    explanations: torch.Tensor, 
-    model_predictions: torch.Tensor, 
-    train_dataset: torch.Tensor, 
-    train_target: torch.Tensor
+    conf: dict[str, Any],
+    dataset: torch.Tensor,
+    target: torch.Tensor,
+    explanations: torch.Tensor,
+    model_predictions: torch.Tensor,
+    train_dataset: torch.Tensor,
+    train_target: torch.Tensor,
+    top_k: int = 1
 ) -> dict[str, Any]:
     """
     Calculate Similar Subsequence Accuracy (SSA) for the given dataset and explanations.
-    
+
     This function evaluates explanation methods by finding the most important subsequences
     according to the explanations, then checking if instances with the same subsequence
     in the same position tend to have the same class. Higher SSA scores indicate better
     explanations, as they identify subsequences that are truly predictive of the class.
-    
+
     Args:
         conf (dict[str, Any]): Configuration dictionary with parameters including:
             - subseq_len (int): Length of subsequences to analyze
             - min_amount_similar_subseq (int): Minimum number of matches required
         dataset (torch.Tensor): Input dataset tensor with shape (dataset_size, input_size, in_dim)
         target (torch.Tensor): Ground truth class labels with shape (dataset_size,)
-        explanations (torch.Tensor): Feature importance values from XAI method with shape 
+        explanations (torch.Tensor): Feature importance values from XAI method with shape
             (dataset_size, input_size*in_dim)
         model_predictions (torch.Tensor): Model's predicted class indices with shape (dataset_size,)
-        train_dataset (torch.Tensor): Training dataset tensor with shape 
+        train_dataset (torch.Tensor): Training dataset tensor with shape
             (train_dataset_size, input_size, in_dim) for finding instances with similar subsequences
         train_target (torch.Tensor): Training dataset class labels with shape (train_dataset_size,)
-        
+        top_k (int): Number of most relevant subsequences to consider
+
     Returns:
         dict[str, Any]: Dictionary containing evaluation results:
             - ssa_mean (float): Mean SSA score
@@ -405,34 +442,70 @@ def main(
             - instances_with_enough_neighbours (int): Count of instances with sufficient matches
             - conf (dict): Copy of the configuration
     """
-    # for each instance: get the index of the most relevant subsequence
-    most_relevant_subsequences_starting_index = get_most_relevant_subsequences_starting_index(explanations=explanations, subseq_len=conf["subseq_len"])
+    most_relevant_subsequences_starting_index_top_k = get_most_relevant_subsequences_starting_index_top_k(explanations=explanations, subseq_len=conf["subseq_len"], top_k=top_k)
 
-    # for each instance: get the actual most relevant subsequence by querying the dataset with the most relevant subsequence index
-    subsequences_dataset = get_subsequences_from_indices(dataset, most_relevant_subsequences_starting_index, conf["subseq_len"])
+    ssa_mean = []
+    ssa_weighted_mean = []
+    ssa_meaned_over_classes = []
+    num_matches = []
+    percentage_correct = []
+    num_matches_enough_neighbours = []
+    most_relevant_subsequences_starting_index = []
+    most_relevant_codebook_indices = []
+    explaination_scores = []
 
-    # get a binary matrix where each row represents the instances and each column represents the instances with a 1 if they have the same subsequence in the same position
-    match_matrix = get_match_matrix_for_instances_with_same_subsequence(dataset, train_dataset, subsequences_dataset, most_relevant_subsequences_starting_index, conf["subseq_len"])
+    for i in range(most_relevant_subsequences_starting_index_top_k.shape[1]):
+        most_relevant_subsequences_starting_index_top_k_i = most_relevant_subsequences_starting_index_top_k[:, i]
+        subsequences_dataset_i = get_subsequences_from_indices(dataset, most_relevant_subsequences_starting_index_top_k_i, conf["subseq_len"])
+        match_matrix_i = get_match_matrix_for_instances_with_same_subsequence(dataset, train_dataset, subsequences_dataset_i, most_relevant_subsequences_starting_index_top_k_i, conf["subseq_len"])
+        num_matches_i, percentage_correct_i = analyze_match_matrix(match_matrix_i, train_target, model_predictions)
+        num_matches_enough_neighbours_i, ssa_mean_i, ssa_weighted_mean_i, ssa_meaned_over_classes_i = clean_up_match_matrix_analysis_and_return_ssa(num_matches_i, percentage_correct_i, conf["min_amount_similar_subseq"], target)
+        logging.info("--------------------------------")
+        logging.info(f"SSA for top {i+1} most relevant subsequences: {ssa_mean_i}")
+        logging.info("Average amount of similar subsequences: {:.2f}".format(num_matches_i.float().mean().item()))
+        logging.info(f"Instances with at least {conf['min_amount_similar_subseq']} \"neighbours\": {len(num_matches_enough_neighbours_i)}/{len(num_matches_i)}")
+        logging.info("SSA Mean: {:.2f}".format(ssa_mean_i))
+        logging.info("SSA Weighted Mean: {:.2f}".format(ssa_weighted_mean_i))
+        logging.info("SSA Meaned over classes: {:.2f}".format(ssa_meaned_over_classes_i))
+        ssa_mean.append(ssa_mean_i)
+        ssa_weighted_mean.append(ssa_weighted_mean_i)
+        ssa_meaned_over_classes.append(ssa_meaned_over_classes_i)
+        num_matches.append(num_matches_i)
+        percentage_correct.append(percentage_correct_i)
+        num_matches_enough_neighbours.append(len(num_matches_enough_neighbours_i))
+        most_relevant_subsequences_starting_index.append(most_relevant_subsequences_starting_index_top_k_i)
+        most_relevant_codebook_indices.append(subsequences_dataset_i.squeeze(-1))
+        explaination_scores.append(explanations[torch.arange(explanations.shape[0]), most_relevant_subsequences_starting_index_top_k_i])
 
-    # for each instance: analyze the match matrix and return the number of matches and the percentage of instances that have the same ground truth label as predicted by the model for the respective instance
-    num_matches, percentage_correct = analyze_match_matrix(match_matrix, train_target, model_predictions)
+    if top_k == 1:
+        ssa_mean = ssa_mean[0]
+        ssa_weighted_mean = ssa_weighted_mean[0]
+        ssa_meaned_over_classes = ssa_meaned_over_classes[0]
+        num_matches = num_matches[0]
+        percentage_correct = percentage_correct[0]
+        num_matches_enough_neighbours = num_matches_enough_neighbours[0]
+        most_relevant_codebook_indices = most_relevant_codebook_indices[0]
+        explaination_scores = explaination_scores[0]
+    else:
+        # convert to numpy
+        num_matches = torch.stack(num_matches).numpy()
+        percentage_correct = torch.stack(percentage_correct).numpy()
+        most_relevant_subsequences_starting_index = torch.stack(most_relevant_subsequences_starting_index).numpy()
+        most_relevant_codebook_indices = torch.stack(most_relevant_codebook_indices).numpy()
+        explaination_scores = torch.stack(explaination_scores).cpu().numpy()
 
-    # for each instance: clean up the analysis by removing instances with less than min_amount_similar_subseq or more than max_amount_similar_subseq and return the SSA, which is the average percentage of correct predictions for the instances with valid amount of similar subsequences
-    num_matches_enough_neighbours, ssa_mean, ssa_weighted_mean, ssa_meaned_over_classes = clean_up_match_matrix_analysis_and_return_ssa(num_matches, percentage_correct, conf["min_amount_similar_subseq"], target)
-
-    logging.info("Average amount of similar subsequences: {:.2f}".format(num_matches.float().mean().item()))
-    logging.info(f"Instances with at least {conf['min_amount_similar_subseq']} \"neighbours\": {len(num_matches_enough_neighbours)}/{len(num_matches)}")
-    logging.info("SSA Mean: {:.2f}".format(ssa_mean))
-    logging.info("SSA Weighted Mean: {:.2f}".format(ssa_weighted_mean))
-    logging.info("SSA Meaned over classes: {:.2f}".format(ssa_meaned_over_classes))
 
     dict_to_save = {
         "ssa_mean": ssa_mean,
         "ssa_weighted_mean": ssa_weighted_mean,
         "ssa_meaned_over_classes": ssa_meaned_over_classes,
         "num_matches": num_matches,
+        "model_predictions": model_predictions.numpy(),
         "percentage_correct": percentage_correct,
-        "instances_with_enough_neighbours": len(num_matches_enough_neighbours),
+        "instances_with_enough_neighbours": num_matches_enough_neighbours,
+        "most_relevant_subsequences_starting_index": most_relevant_subsequences_starting_index,
+        "most_relevant_codebook_indices": most_relevant_codebook_indices,
+        "explaination_scores": explaination_scores,
         "conf": conf.copy(),
     }
     return dict_to_save
@@ -442,21 +515,21 @@ def main(
 def run_xai_method(conf: dict[str, Any]):
     """
     Run SSA evaluation for multiple datasets, models, XAI methods, and subsequence lengths.
-    
+
     This function coordinates the evaluation process across a grid of parameters:
     - Datasets: ECG, CNC_Machining, Welding
     - Models: SAX_MLP
     - XAI methods: SM, IG, RISE, LIME, ATM, RND
     - Random seeds: 0-4
     - Subsequence lengths: 1-5
-    
+
     For each configuration, it calculates the Similar Subsequence Accuracy (SSA)
     and saves all results to a pickle file.
-    
+
     Args:
         conf: Base configuration dictionary that will be updated with specific
              settings for each evaluation run
-             
+
     Returns:
         None: Results are saved to a pickle file at data_path/XAI_Results/ssa_results.pkl
     """
@@ -484,7 +557,7 @@ def run_xai_method(conf: dict[str, Any]):
                             result_list.append(dict_to_save)
                     except Exception as e:
                         logging.error(f"Error preparing {xai_method} on {dataset_name} with {model}: {e}")
-    
+
     output_path = Path(conf["data_path"]) / "XAI_Results" / "ssa_results.pkl"
     with open(output_path, "wb") as f:
         pickle.dump(result_list, f)
@@ -506,7 +579,3 @@ if __name__ == "__main__":
     args.add_argument("--use-small-subset", type=bool, default=False)
     conf = vars(args.parse_args())
     logging.info(f"Configuration: {conf}")
-
-
-
-    run_xai_method(conf)

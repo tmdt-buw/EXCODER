@@ -36,7 +36,7 @@ def load_explanations(dataset_name, model_type, xai_method, seed, data_path):
     return explanations
 
 
-def get_dataset_and_model(dataset_name, model_type, conf, get_classification_models_and_data):
+def get_dataset_and_model(dataset_name, model_type, conf, get_classification_models_and_data, small_subset_size=1_000):
     """
     Load dataset and model.
     
@@ -45,7 +45,7 @@ def get_dataset_and_model(dataset_name, model_type, conf, get_classification_mod
         model_type: Type of the model
         conf: Configuration dictionary
         get_classification_models_and_data: Function to get models and data
-        
+        small_subset_size: Size of the small subset if used
     Returns:
         tuple: (model, dataset, target)
     """
@@ -65,8 +65,8 @@ def get_dataset_and_model(dataset_name, model_type, conf, get_classification_mod
     
     # In case you want to test a shorter dataset
     if conf.get("use_small_subset", False):
-        dataset = dataset[:200]
-        target = target[:200]
+        dataset = dataset[:small_subset_size]
+        target = target[:small_subset_size]
     
     return model, dataset, target
 
