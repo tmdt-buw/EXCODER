@@ -3,7 +3,7 @@
 [Zenodo](https://doi.org/10.5281/zenodo.15101072)
 
 The dataset provides multivariate time series from arc welding processes, focusing on quality prediction. It contains synchronously sampled current and voltage signals at 100 kHz, labeled as either "substandard" (43%) or "satisfactory" (57%) welds.
-> Hahn, Y., Maack, R., Tercan, H., Buchholz, G., Purrio, M., Angerhausen, M., Meyes, R., & Meisen, T. (2025). Metal Arc Welding [Data set].  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15101072.svg)](https://doi.org/10.5281/zenodo.15101072)
+> Hahn, Y., Maack, R., Tercan, H., Buchholz, G., Purrio, M., Angerhausen, M., Meyes, R., & Meisen, T. (2025). Metal Arc Welding [Data set]. [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15497262.svg)](https://doi.org/10.5281/zenodo.15497262)
 
 
 ### Setup Instructions
