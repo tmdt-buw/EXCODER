@@ -57,8 +57,8 @@ def export_to_npy_files(data_path: str | Path):
     data = np.stack([current_data, voltage_data], axis=2)
     ids = np.stack([np.arange(len(exp_ids)), exp_ids, np.arange(len(exp_ids)), labels], axis=1)
 
-    np.save(data_path / "welding_data.npy", data)
-    np.save(data_path / "welding_ids.npy", ids)
+    np.save(data_path / "ds_1_4_data.npy", data)
+    np.save(data_path / "ds_1_4_quality.npy", ids)
     print(f"Saved to {data_path}")
 
 
