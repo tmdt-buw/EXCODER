@@ -10,7 +10,7 @@ uv sync
 ```
 
 ## Citation
-If you use this repository in your research, please cite:
+If you use this repository in your research, please cite the following arXiv preprint:
 
 ```bibtex
 @misc{hahn2026excoderexplainableclassificationdiscrete,
