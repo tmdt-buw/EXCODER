@@ -2,6 +2,7 @@
 
 ## News
 - 🎉 The EXCODER paper has been accepted at PAKDD 2026.
+- 📄 Preprint: https://arxiv.org/abs/2602.13087v1
 
 ## Install Python Environment
 ```bash
