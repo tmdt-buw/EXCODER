@@ -1,8 +1,26 @@
 # EXCODER: EXplainable Classification Of DiscretE time series Representations
 
+## News
+- 🎉 The EXCODER paper has been accepted at PAKDD 2026.
+
 ## Install Python Environment
 ```bash
 uv sync
+```
+
+## Citation
+If you use this repository in your research, please cite:
+
+```bibtex
+@misc{hahn2026excoderexplainableclassificationdiscrete,
+	title={EXCODER: EXplainable Classification Of DiscretE time series Representations}, 
+	author={Yannik Hahn and Antonin Königsfeld and Hasan Tercan and Tobias Meisen},
+	year={2026},
+	eprint={2602.13087},
+	archivePrefix={arXiv},
+	primaryClass={cs.LG},
+	url={https://arxiv.org/abs/2602.13087}, 
+}
 ```
 
 
@@ -11,9 +29,9 @@ uv sync
 The dataset provided is a collection of real-world industrial vibration data collected from a brownfield CNC milling machine. The acceleration has been measured using a tri-axial accelerometer (Bosch CISS Sensor) mounted inside the machine. The X- Y- and Z-axes of the accelerometer have been recorded using a sampling rate equal to 2 kHz. Thereby normal as well as anomoulous data have been collected for 6 different timeframes, each lasting 6 months from October 2018 until August 2021 and labelled accordingly. It can be used to investigate the scalability of models and research process variations as the anomaly impact differs. In total there is data from three different CNC milling machines each executing 15 processes. For a detailed description of the data and experimental set-up, please refer to the paper. 
 > Tnani, Mohamed-Ali; Feil, Michael; Diepold, Klaus. Smart Data Collection System for Brownfield CNC Milling Machines: A New Benchmark Dataset for Data-Driven Machine Monitoring. Procedia CIRP2022,107, 131–136.
 
-### Welding - [Zenodo](https://doi.org/10.5281/zenodo.15101072)
+### Welding - [Zenodo](https://zenodo.org/records/15497262)
 The dataset provides multivariate time series from arc welding processes, focusing on quality prediction. It contains synchronously sampled current and voltage signals at 100 kHz, labeled as either "substandard" (43%) or "satisfactory" (57%) welds.
-> Hahn, Y., Maack, R., Tercan, H., Buchholz, G., Purrio, M., Angerhausen, M., Meyes, R., & Meisen, T. (2025). Metal Arc Welding [Data set].  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15101072.svg)](https://doi.org/10.5281/zenodo.15101072)
+> Hahn, Y., Maack, R., Tercan, H., Buchholz, G., Purrio, M., Angerhausen, M., Meyes, R., & Meisen, T. (2025). Metal Arc Welding [Data set].  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15497262.svg)](https://doi.org/10.5281/zenodo.15497262)
 
 
 ### ECG - [Kaggle](https://www.kaggle.com/datasets/shayanfazeli/heartbeat/data)
@@ -138,3 +156,5 @@ The ECG dataset is a combination of the MIT-BIH Arrhythmia and PTB Diagnostic EC
 |         | VQ-VAE MLP | 0.09 ± 0.06 | 0.05 ± 0.03 | 0.14 ± 0.01 | 0.09 ± 0.02 | - | 0.6 ± 0.03 | 0.87 ± 0.01 |
 |         | SAX MLP | 0.02 ± 0.02 | 0.0 ± 0.02 | **0.1 ± 0.01** | 0.1 ± 0.03 | - | 0.63 ± 0.02 | **0.88 ± 0.01** |
 |         | VQ-VAE Tr | 0.02 ± 0.03 | 0.03 ± 0.01 | 0.11 ± 0.02 | 0.09 ± 0.01 | 0.05 ± 0.04 | 0.63 ± 0.03 | 0.76 ± 0.01 |
+
+
