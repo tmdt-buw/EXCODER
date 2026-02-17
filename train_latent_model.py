@@ -151,7 +151,7 @@ def main():
     args.add_argument("--n-hidden-layers", type=int, default=4)
     args.add_argument("--input-size", type=int, default=200)
     args.add_argument("--use-layer-norm", action=argparse.BooleanOptionalAction, default=False)
-    args.add_argument("--use-mlflow", action=argparse.BooleanOptionalAction, default=True)
+    args.add_argument("--use-mlflow", action=argparse.BooleanOptionalAction, default=False)
     args.add_argument("--mlflow-experiment-name", type=str, default="xai-ts-classification")
     args.add_argument("--prob-unk-token", type=float, default=0.0)
     args.add_argument("--create-new-ds", action=argparse.BooleanOptionalAction, default=False)

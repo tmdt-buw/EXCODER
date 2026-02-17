@@ -242,7 +242,7 @@ def main():
     args.add_argument("--finetune-epochs", type=int, default=5)
     args.add_argument("--att-dropout", type=float, default=0.0)
     args.add_argument("--res-dropout", type=float, default=0.1)
-    args.add_argument("--use-mlflow", action=argparse.BooleanOptionalAction, default=True)
+    args.add_argument("--use-mlflow", action=argparse.BooleanOptionalAction, default=False)
     args.add_argument("--mlflow-experiment-name", type=str, default="xai-ts-classification")
     args.add_argument("--hyperparams-search-str", type=str, default="NoHyperparamSearch")
     args.add_argument("--dataset-path", type=str, default="data")

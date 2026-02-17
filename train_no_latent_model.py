@@ -181,7 +181,7 @@ def main():
     args.add_argument("--n-hidden-layers", type=int, default=4)
     args.add_argument("--input-size", type=int, default=200)
     args.add_argument("--use-layer-norm", action=argparse.BooleanOptionalAction, default=False)
-    args.add_argument("--use-mlflow", action=argparse.BooleanOptionalAction, default=True)
+    args.add_argument("--use-mlflow", action=argparse.BooleanOptionalAction, default=False)
     args.add_argument("--mlflow-experiment-name", type=str, default="xai-ts-classification")
     args.add_argument("--n-gpus", type=int, default=1)
     conf = vars(args.parse_args())
